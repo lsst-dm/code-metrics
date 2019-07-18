@@ -1,0 +1,31 @@
+---
+# github.com/AlDanial/cloc
+header : 
+  cloc_url           : github.com/AlDanial/cloc
+  cloc_version       : 1.72
+  elapsed_seconds    : 30.9871671199799
+  n_files            : 3238
+  n_lines            : 604539
+  files_per_second   : 104.494870004177
+  lines_per_second   : 19509.3342240442
+  report_file        : w.2018.35.yaml
+Python :
+  nFiles: 1869
+  blank: 53612
+  comment: 96369
+  code: 195471
+C++ :
+  nFiles: 827
+  blank: 20417
+  comment: 28657
+  code: 106826
+C/C++ Header :
+  nFiles: 542
+  blank: 14771
+  comment: 47412
+  code: 41004
+SUM: 
+  blank: 88800
+  comment: 172438
+  code: 343301
+  nFiles: 3238
