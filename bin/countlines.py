@@ -187,7 +187,8 @@ os.chdir(sources_dir)
 for tag in TAGS:
     print(f"Checking out source with git ref {tag}")
     # Run lsst_build with this ref
-    # lsst_build prepare --repos repos.yaml --exclusion-map ... build_dir product
+    # lsst_build prepare --repos repos.yaml
+    #                    --exclusion-map ... build_dir product
     subprocess.run([lsst_build_exe,
                     "prepare",
                     "--repos", os.path.join(lsstsw_dir, "etc", "repos.yaml"),
