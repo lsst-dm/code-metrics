@@ -25,7 +25,7 @@ import sys
 import subprocess
 
 # Set to the location of the cloc.pl executable
-CLOC_EXE = "/Users/timj/Downloads/cloc-1.72.pl"
+CLOC_EXE = "/Users/timj/Downloads/cloc-1.86.pl"
 
 # We cannot guess tags so easiest to list them
 # eg in lsst_distrib git repo: git tag | grep w.
