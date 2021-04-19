@@ -25,7 +25,7 @@ import sys
 import subprocess
 
 # Set to the location of the cloc.pl executable
-CLOC_EXE = "/Users/timj/Downloads/cloc-1.86.pl"
+CLOC_EXE = "/Users/timj/Downloads/cloc-1.88.pl"
 
 # We cannot guess tags so easiest to list them
 # eg in lsst_distrib git repo: git tag | grep w.
@@ -251,6 +251,50 @@ w.2020.21
 w.2020.22
 w.2020.23
 w.2020.24
+w.2020.25
+w.2020.26
+w.2020.27
+w.2020.28
+w.2020.29
+w.2020.30
+w.2020.31
+w.2020.32
+w.2020.33
+w.2020.34
+w.2020.35
+w.2020.36
+w.2020.37
+w.2020.38
+w.2020.39
+w.2020.40
+w.2020.41
+w.2020.42
+w.2020.43
+w.2020.44
+w.2020.45
+w.2020.46
+w.2020.47
+w.2020.48
+w.2020.49
+w.2020.50
+w.2020.51
+w.2020.52
+w.2021.01
+w.2021.02
+w.2021.03
+w.2021.04
+w.2021.05
+w.2021.06
+w.2021.07
+w.2021.08
+w.2021.09
+w.2021.10
+w.2021.11
+w.2021.12
+w.2021.13
+w.2021.14
+w.2021.15
+w.2021.16
 """
 
 # Older release tags
@@ -296,7 +340,7 @@ for tag in TAGS:
                     "--ref", tag,
                     sources_dir,
                     PRODUCT
-                    ])
+                    ], check=True)
 
     # Read the manifest file to work out which packages could contribute
     # to the count.
@@ -332,4 +376,4 @@ for tag in TAGS:
                              '--include-lang=Python,C++,C/C++ Header',
                              "--yaml",
                              f"--report-file={output_file}",
-                             *products])
+                             *products], check=True)
