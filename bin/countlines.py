@@ -25,7 +25,7 @@ import sys
 import subprocess
 
 # Set to the location of the cloc.pl executable
-CLOC_EXE = "/Users/timj/Downloads/cloc-1.88.pl"
+CLOC_EXE = "/opt/homebrew/bin/cloc"
 
 # We cannot guess tags so easiest to list them
 # eg in lsst_distrib git repo: git tag | grep w.
@@ -357,6 +357,14 @@ w.2022.23
 w.2022.24
 w.2022.25
 w.2022.26
+w.2022.27
+w.2022.28
+w.2022.29
+w.2022.30
+w.2022.31
+w.2022.32
+w.2022.34
+w.2022.35
 """
 
 # Older release tags
