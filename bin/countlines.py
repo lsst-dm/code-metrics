@@ -21,8 +21,8 @@ Obtain cloc from: https://github.com/AlDanial/cloc
 """
 
 import os
-import sys
 import subprocess
+import sys
 
 # Set to the location of the cloc.pl executable
 CLOC_EXE = "/opt/homebrew/bin/cloc"
@@ -536,14 +536,21 @@ for tag in TAGS:
     # Run lsst_build with this ref
     # lsst_build prepare --repos repos.yaml
     #                    --exclusion-map ... build_dir product
-    subprocess.run([lsst_build_exe,
-                    "prepare",
-                    "--repos", os.path.join(lsstsw_dir, "etc", "repos.yaml"),
-                    "--exclusion-map", os.path.join(lsstsw_dir, "etc", "exclusions.txt"),
-                    "--ref", tag,
-                    sources_dir,
-                    PRODUCT
-                    ], check=True)
+    subprocess.run(
+        [
+            lsst_build_exe,
+            "prepare",
+            "--repos",
+            os.path.join(lsstsw_dir, "etc", "repos.yaml"),
+            "--exclusion-map",
+            os.path.join(lsstsw_dir, "etc", "exclusions.txt"),
+            "--ref",
+            tag,
+            sources_dir,
+            PRODUCT,
+        ],
+        check=True,
+    )
 
     # Read the manifest file to work out which packages could contribute
     # to the count.
@@ -558,8 +565,9 @@ for tag in TAGS:
             prod = line.split(" ")[0]
 
             # Do not bother to count if this product has an eupspkg file
-            if (os.path.exists(os.path.join(sources_dir, prod, "ups", "eupspkg.cfg.sh")) or
-                    os.path.exists(os.path.join(sources_dir, prod, "upstream"))):
+            if os.path.exists(os.path.join(sources_dir, prod, "ups", "eupspkg.cfg.sh")) or os.path.exists(
+                os.path.join(sources_dir, prod, "upstream")
+            ):
                 continue
 
             # Consider filtering out ndarray (was LSST, then thirdparty)
@@ -574,9 +582,14 @@ for tag in TAGS:
         sys.exit(1)
 
     # We are only interested in the line counts for Python and C++
-    output_file = "{}.yaml".format(tag)
-    output = subprocess.run([CLOC_EXE,
-                             '--include-lang=Python,C++,C/C++ Header',
-                             "--yaml",
-                             f"--report-file={output_file}",
-                             *products], check=True)
+    output_file = f"{tag}.yaml"
+    output = subprocess.run(
+        [
+            CLOC_EXE,
+            "--include-lang=Python,C++,C/C++ Header",
+            "--yaml",
+            f"--report-file={output_file}",
+            *products,
+        ],
+        check=True,
+    )
