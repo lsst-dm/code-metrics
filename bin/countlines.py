@@ -594,6 +594,10 @@ for tag in TAGS:
             ):
                 continue
 
+            # Skip thirdparty packages that are not LSST code.
+            if prod in ("metadetect",):
+                continue
+
             # Consider filtering out ndarray (was LSST, then thirdparty)
 
             # This is a product we should analyze
