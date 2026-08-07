@@ -1784,6 +1784,20 @@ def read_rows(path: Path) -> list[LineRow]:
         return [LineRow(**record) for record in csv.DictReader(fd)]
 
 
+```
+
+> **Correction applied during implementation.** The `path.open("w")` below
+> truncates the destination before rewriting it, so a crash mid-write
+> destroys all previously collected history — which contradicts this plan's
+> own promise that an interrupted run stays resumable, given Task 7 flushes
+> every 50 samples for exactly that reason. The shipped implementation
+> writes through a temporary file in the destination's directory and
+> `os.replace()`s it into place, and preserves an existing file's mode
+> (defaulting to `0o644` for new files) so the atomic path does not silently
+> narrow permissions. See `python/lsst/codemetrics/storage.py` for the final
+> form; the code below is retained only to show the original intent.
+
+```python
 def write_rows(path: Path, rows: Iterable[LineRow]) -> None:
     """Write records, sorted canonically.
 
