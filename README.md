@@ -21,6 +21,33 @@ commit, and `--counter scc` or `--counter tokei` for a different backend.
 Counts from different backends coexist in one file, so they can be
 compared over identical revisions.
 
+### The backends disagree about docstrings
+
+cloc and scc count a Python docstring as a comment.
+tokei counts it as code.
+On an 18-line file carrying 12 lines of docstring:
+
+| Backend | code | comment | blank |
+|---|---|---|---|
+| cloc | 3 | 10 | 5 |
+| scc | 3 | 12 | 3 |
+| tokei | 14 | 1 | 3 |
+
+Only the total of all three columns is the same.
+A `code` or `comment` series compared across backends therefore measures
+the tools' conventions rather than the code base, so pick one backend and
+stay with it.
+`select()` raises rather than mixing them silently.
+
+`cloc --docstring-as-code` makes cloc follow tokei's convention, but
+every file in `data/` was counted with cloc's default, so the stack-wide
+scan keeps it.
+
+The backends also name C and C++ headers differently: cloc reports one
+`C/C++ Header`, while scc and tokei split `C Header` from `C++ Header`.
+`CPP_HEADER_ALIASES` folds all of them into `C++`, and covers whichever
+backend produced the data.
+
 Results are stored one row per revision and language, so a language
 appearing for the first time adds rows rather than columns.
 

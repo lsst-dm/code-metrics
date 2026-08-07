@@ -9,7 +9,7 @@ pytest.importorskip("pandas")
 
 import pandas as pd  # noqa: E402
 from lsst.codemetrics.plotting import (  # noqa: E402
-    CLOC_CPP_ALIASES,
+    CPP_HEADER_ALIASES,
     apply_aliases,
     load_repo,
     load_stack,
@@ -60,7 +60,7 @@ def test_load_repo_derives_lines(repo_csv):
 
 def test_apply_aliases_folds_headers_into_cpp(repo_csv):
     frame = select(load_repo("demo", repo_csv), counter="cloc")
-    folded = apply_aliases(frame, CLOC_CPP_ALIASES)
+    folded = apply_aliases(frame, CPP_HEADER_ALIASES)
     assert set(folded["language"]) == {"Python", "C++"}
     cpp = folded[folded["language"] == "C++"]
     assert len(cpp) == 1
@@ -242,3 +242,49 @@ def test_select_accepts_a_counter_that_is_present(repo_csv):
 def test_load_repo_names_the_missing_file(tmp_path):
     with pytest.raises(FileNotFoundError, match="absent.csv"):
         load_repo("absent", tmp_path)
+
+
+def header_frame(counter, header_languages):
+    """A frame with C++ plus whatever that backend calls its headers."""
+    rows = []
+    for language in ("C++", *header_languages):
+        rows.append(
+            LineRow(
+                commit="a",
+                date=datetime(2020, 1, 1, tzinfo=UTC),
+                counter=counter,
+                counter_version="1.0",
+                language=language,
+                n_files=1,
+                blank=1,
+                comment=2,
+                code=10,
+            )
+        )
+    frame = pd.DataFrame([r.model_dump() for r in rows])
+    frame["lines"] = frame["code"] + frame["comment"]
+    return frame
+
+
+def test_cpp_header_aliases_fold_cloc_headers():
+    folded = apply_aliases(header_frame("cloc", ["C/C++ Header"]), CPP_HEADER_ALIASES)
+    assert set(folded["language"]) == {"C++"}
+    assert folded["code"].iloc[0] == 20
+
+
+def test_cpp_header_aliases_fold_tokei_headers():
+    folded = apply_aliases(header_frame("tokei", ["C Header", "C++ Header"]), CPP_HEADER_ALIASES)
+    assert set(folded["language"]) == {"C++"}
+    assert folded["code"].iloc[0] == 30
+
+
+def test_cpp_header_aliases_fold_scc_headers():
+    folded = apply_aliases(header_frame("scc", ["C Header", "C++ Header"]), CPP_HEADER_ALIASES)
+    assert set(folded["language"]) == {"C++"}
+    assert folded["code"].iloc[0] == 30
+
+
+def test_cpp_header_aliases_leave_other_languages_alone():
+    frame = header_frame("tokei", ["C Header", "Python"])
+    folded = apply_aliases(frame, CPP_HEADER_ALIASES)
+    assert set(folded["language"]) == {"C++", "Python"}

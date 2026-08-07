@@ -2,6 +2,21 @@
 
 This module is the only one that imports pandas, which is an optional
 dependency installed by the ``plot`` extra.
+
+Counts from different backends are not interchangeable, and the split
+between code and comment is where they disagree most.  cloc and scc treat
+a Python docstring as a comment; tokei treats it as code.  On a file of
+18 lines carrying 12 lines of docstring, cloc reports 3 code and 10
+comment, scc reports 3 and 12, and tokei reports 14 and 1.
+
+Only the total of code, comment, and blank is the same across all three.
+Comparing a ``code`` or ``comment`` series collected by one backend
+against another therefore measures the tools' conventions rather than the
+code base, which is why `select` refuses to mix backends silently.
+
+``cloc --docstring-as-code`` makes cloc agree with tokei's convention,
+but the 543 stack-wide files in ``data/`` were all counted with cloc's
+default, so changing it would break their comparability.
 """
 
 import warnings
@@ -14,12 +29,21 @@ import yaml
 
 from .storage import read_rows
 
-CLOC_CPP_ALIASES: dict[str, str] = {"C/C++ Header": "C++"}
-"""Folds cloc's header language into C++ (`dict` [ `str`, `str` ]).
+CPP_HEADER_ALIASES: dict[str, str] = {
+    "C/C++ Header": "C++",
+    "C Header": "C++",
+    "C++ Header": "C++",
+}
+"""Folds C and C++ headers into C++ (`dict` [ `str`, `str` ]).
+
+Covers all three backends at once.  cloc reports a single
+``C/C++ Header``, while scc and tokei split ``C Header`` from
+``C++ Header``; the names do not collide, so one mapping serves whichever
+backend produced the data.
 
 Provided for convenience only.  Aliasing is never applied automatically,
-because different tools classify headers differently and treating that as
-a naming difference would misrepresent what they measured.
+because the tools genuinely classify headers differently and treating
+that as a naming difference would misrepresent what they measured.
 """
 
 
