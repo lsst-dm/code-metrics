@@ -1,0 +1,21 @@
+# Pre-weekly formal releases, and the weekly-style names their results were
+# recorded under in data/.
+#
+# Columns: release-tag  output-name  tag-date
+# A '#' begins a comment and runs to end of line.
+#
+# output-name is authoritative. It reproduces the file names already in data/,
+# and where it disagrees with the ISO week of tag-date the comment says so.
+#
+# lsst_distrib is a metapackage that rarely commits, so several of these tags
+# point at the same commit. What separates the releases is how lsst-build
+# resolves each tag name across the package repositories, which is why this
+# mapping is transcribed rather than derived.
+
+7.2.0.0  w.2013.25  2013-06-17
+8.0.0.0  w.2014.20  2014-03-15  # tag date is week 11; w.2014.20 is the recorded name
+b128     w.2014.30  2014-07-22  # build tag, not a formal release
+9.0      w.2014.31  2014-07-31  # 9.1 falls in the same week
+9.2      w.2014.32  2014-08-08
+10.0     w.2014.50  2014-12-09
+10.1     w.2015.20  2015-05-12
