@@ -324,11 +324,16 @@ So `legacy-tags.txt` records the mapping literally, not just the names:
 ```
 # release-tag  weekly-equivalent
 7.2.0.0        w.2013.25
-...
+8.0.0.0        w.2014.20   # uncertain; see below
+b128           w.2014.30
+9.0            w.2014.31   # 9.1 falls in the same week
+9.2            w.2014.32
+10.0           w.2014.50
+10.1           w.2015.20
 ```
 
 The mapping is transcribed, not derived.
-Checking the tag history in `lsst_distrib` shows why no rule reproduces it.
+The tag history shows why no rule reproduces it.
 
 `lsst_distrib` is a metapackage that rarely commits, so its tags record when
 tagging happened rather than when anything changed, and most of these tags point
@@ -340,19 +345,24 @@ What separates those releases is how `lsst-build` resolves each tag name across
 the package repositories, so `lsst_distrib`'s own commit date carries no
 information about them.
 
-Taking the ISO week of each tag's `taggerdate` accounts for five of the seven
-files: `7.2.0.0` to `w.2013.25`, `9.0` or `9.1` to `w.2014.31`, `9.2` to
-`w.2014.32`, `10.0` to `w.2014.50`, and `10.1` to `w.2015.20`.
-It leaves two unexplained.
-`w.2014.30` matches `b128` exactly, but `b128` is a build tag absent from
+Taking the ISO week of a tag's date accounts for six of the seven files.
+`7.2.0.0`, `9.0`, `9.2`, `10.0`, and `10.1` land on their file's week in both
+`lsst_distrib` and `afw`.
+`b128` matches `w.2014.30` exactly and is the only `b*` build tag in `afw` for
+all of 2014, which is why it appears in the mapping despite being absent from
 `OLD_TAGS_STR`.
-No tag falls in the week of `w.2014.20` at all; the nearest release, `8.0.0.0`,
-was tagged in week 11.
-`6.1.0.x` and `6.2.0.0` produced no file.
 
-The pairing is therefore editorial judgment about when each release happened,
-and only the author of `data/` can supply it.
-The file is written by hand, with uncertain entries commented as such.
+`w.2014.20` corresponds to no tag anywhere in the stack.
+`afw` has no tag at all between 2014-05-03 and 2014-07-02, and the whole
+`8.0.0.x` series was tagged in weeks 11 and 12 across every package, so nothing
+falls in week 20.
+`8.0.0.0` is the only unassigned release tag from that year and is the
+presumptive source, but the filename reflects a judgment about when the release
+happened rather than any recorded date.
+That entry stays commented as uncertain.
+
+`6.1.0.0`, `6.1.0.4`, and `6.2.0.0` produced no file and are not in the mapping.
+The latter two are absent from `afw` entirely.
 
 ### Legacy results are frozen
 
