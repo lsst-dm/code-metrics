@@ -13,6 +13,7 @@ whole file instead.
 import contextlib
 import csv
 import os
+import stat
 import tempfile
 from collections.abc import Iterable, Iterator
 from datetime import datetime
@@ -21,6 +22,16 @@ from typing import IO
 
 import yaml
 from pydantic import BaseModel
+
+DEFAULT_FILE_MODE = 0o644
+"""Permission mode applied to a newly created output file (`int`).
+
+This is the conventional umask-standard mode rather than a mode read
+from the process umask.  Querying the umask safely requires setting
+it to zero and restoring it afterward, which is racy in a threaded
+process; a fixed default is also deterministic and testable, which
+the actual umask, being environment-dependent, is not.
+"""
 
 COLUMNS: tuple[str, ...] = (
     "commit",
@@ -86,7 +97,12 @@ def _atomic_create(path: Path, newline: str | None = None) -> Iterator[IO[str]]:
     The destination is left untouched until the caller's block
     completes without raising, so a process that dies or an exception
     that is raised partway through serialization cannot truncate or
-    corrupt content already persisted at `path`.
+    corrupt content already persisted at `path`.  The destination's
+    permission mode is preserved across the replace; a destination
+    that does not yet exist gets `DEFAULT_FILE_MODE`.  Without this,
+    the owner-only mode that `tempfile.mkstemp` gives the temporary
+    file would carry through the replace and silently narrow the
+    destination's permissions.
 
     Parameters
     ----------
@@ -103,9 +119,14 @@ def _atomic_create(path: Path, newline: str | None = None) -> Iterator[IO[str]]:
         same directory as `path` so the final replace is atomic.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        mode = stat.S_IMODE(path.stat().st_mode)
+    except FileNotFoundError:
+        mode = DEFAULT_FILE_MODE
     handle, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     tmp_path = Path(tmp_name)
     try:
+        os.fchmod(handle, mode)
         with os.fdopen(handle, "w", newline=newline) as fd:
             yield fd
     except BaseException:
