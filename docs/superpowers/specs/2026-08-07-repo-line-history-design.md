@@ -255,10 +255,44 @@ git tag --list 'w.*' --sort=creatordate
 lightweight ones, giving true chronological order whatever the padding.
 That order is also the one that minimizes checkout churn.
 
-The tag list comes from `lsst_distrib` through the same clone cache
-`repo-history` uses.
+#### Getting the tags before anything is built
+
+The list was hardcoded partly to escape a chicken-and-egg problem.
+`countlines.py` is typically run against a freshly deployed `lsstsw`:
+
+```
+git clone https://github.com/lsst/lsstsw
+cd lsstsw && ./bin/deploy && . ./bin/envconfig
+```
+
+At that point `build/` is empty.
+There is no `lsst_distrib` checkout to read tags from, yet a tag is needed
+before the first `lsst-build` invocation can run.
+
+Running `lsst-build` once against `main` to populate `build/lsst_distrib` would
+break the cycle, but it costs a full prepare pass and requires knowing the
+deployed tree's layout.
+
+The cheaper route is that `stack-scan` already locates `etc/repos.yaml` to pass
+to `lsst-build`, and that file names the source of every product:
+
+```yaml
+lsst_distrib: https://github.com/lsst/lsst_distrib.git
+```
+
+So tag discovery resolves `lsst_distrib` from `etc/repos.yaml` and clones it
+`--bare` into the same cache `repo-history` uses, then reads
+`git tag --list 'w.*' --sort=creatordate`.
+`lsst_distrib` is a metapackage that rarely commits, so the clone is small.
+
+Values in `repos.yaml` may be a plain URL string or a mapping with a `url` key,
+and the parser accepts both.
+
+If `build/lsst_distrib` already exists, it is fetched and used directly rather
+than cloned a second time.
+
 `--tags-file` overrides the whole list, legacy entries included, when a fixed
-list is needed.
+list is needed, and skips tag discovery entirely.
 
 The derived list may contain weeklies that `TAGS_STR` omitted, since that list
 has gaps.
@@ -291,7 +325,9 @@ So `legacy-tags.txt` records the mapping literally, not just the names:
 The mapping is transcribed, not derived.
 Checking the tag history in `lsst_distrib` shows why no rule reproduces it.
 
-Most of these tags point at the same commit.
+`lsst_distrib` is a metapackage that rarely commits, so its tags record when
+tagging happened rather than when anything changed, and most of these tags point
+at the same commit.
 `10.1.rc3`, `b128`, `9.0`, and `10.1` all resolve to the commit of 2014-07-13,
 and `7.2.0.0`, `6.2.0.0`, and `6.1.0.4` all resolve to the commit of
 2012-11-16.
