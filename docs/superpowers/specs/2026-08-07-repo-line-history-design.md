@@ -146,9 +146,15 @@ Samples are returned sorted by date, ascending.
 
 ## Fetching and collection
 
-Given a URL, `worktree.py` clones `--bare` into a cache directory, by default
+Given a URL, `worktree.py` clones `--mirror` into a cache directory, by default
 under `~/.cache/lsst-code-metrics/`, overridable with `--cache-dir`.
-Later runs `git fetch --prune --tags` into that cache.
+Later runs `git fetch --prune` into that cache.
+
+The clone is a mirror rather than a plain `--bare` because `--bare` leaves
+`remote.origin.fetch` unset, so a later fetch would update tags and
+`FETCH_HEAD` alone and leave branch refs frozen at whatever the first clone
+saw.
+`--mirror` implies `--bare` and maps every ref, so branches stay current.
 Given a local path, it uses that repository as the worktree source.
 
 Either way, counting happens in a throwaway detached worktree in a temporary

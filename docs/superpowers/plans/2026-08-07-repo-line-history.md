@@ -1400,7 +1400,7 @@ from pathlib import Path
 from .revisions import git_output
 
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "lsst-code-metrics"
-"""Location of the bare clone cache (`~pathlib.Path`)."""
+"""Location of the mirror clone cache (`~pathlib.Path`)."""
 
 _URL_RE = re.compile(r"^(https?|git|ssh|file)://|^[^/]+@[^/]+:")
 
@@ -1442,15 +1442,20 @@ def repo_name(target: str) -> str:
 def ensure_source(target: str, cache_dir: Path) -> Path:
     """Return a local repository to create worktrees from.
 
-    A local path is used where it stands.  A URL is cloned bare into the
-    cache on first use and fetched on later runs.
+    A local path is used where it stands.  A URL is cloned as a mirror
+    into the cache on first use and fetched on later runs.  A plain
+    ``--bare`` clone does not configure ``remote.origin.fetch``, so a
+    later ``git fetch`` would update tags and ``FETCH_HEAD`` only and
+    leave branch refs frozen at whatever the first clone saw.
+    ``--mirror`` implies ``--bare`` and additionally sets up a refspec
+    that maps every ref, so a later fetch keeps branches current too.
 
     Parameters
     ----------
     target : `str`
         Repository path or URL.
     cache_dir : `~pathlib.Path`
-        Directory holding cached bare clones.
+        Directory holding cached mirror clones.
 
     Returns
     -------
@@ -1463,9 +1468,9 @@ def ensure_source(target: str, cache_dir: Path) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
     cached = cache_dir / f"{repo_name(target)}.git"
     if cached.exists():
-        git_output(cached, "fetch", "--prune", "--tags", "origin")
+        git_output(cached, "fetch", "--prune", "origin")
     else:
-        git_output(cache_dir, "clone", "--bare", target, str(cached))
+        git_output(cache_dir, "clone", "--mirror", target, str(cached))
     return cached
 
 
@@ -2200,7 +2205,7 @@ def collect(
     since, until : `~datetime.datetime`, optional
         Bound the sampled date range.
     cache_dir : `~pathlib.Path`, optional
-        Directory holding cached bare clones.
+        Directory holding cached mirror clones.
     force : `bool`, optional
         Recount revisions that are already stored.
     strict : `bool`, optional
