@@ -1,6 +1,7 @@
 """Orchestration of a per-repository collection run."""
 
 import logging
+import sys
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -143,7 +144,10 @@ def collect(
     strict : `bool`, optional
         Abort on the first failure instead of skipping it.
     flush_every : `int`, optional
-        Write partial results after this many revisions.
+        Write partial results after this many revisions.  Whatever has
+        been collected is also written once the run ends, however it
+        ends: normally, on a caught failure, on an exception that
+        propagates out of this function, or on a `KeyboardInterrupt`.
     progress : `bool`, optional
         Display a progress bar.
 
@@ -199,29 +203,46 @@ def collect(
         Progress(*columns, disable=not progress) as bar,
     ):
         task = bar.add_task(f"Counting {resolved_name}", total=len(pending))
-        for index, sample in enumerate(pending, start=1):
-            try:
-                checkout(tree, sample.commit)
-                rows = _rows_for_sample(sample, counter, tree, exclude_dirs)
-            except (CounterError, GitError):
-                if strict:
-                    raise
-                failed += 1
-                _LOG.warning("Skipping %s: counting failed.", sample.commit[:12])
-            else:
-                if rows:
-                    collected.extend(rows)
+        try:
+            for index, sample in enumerate(pending, start=1):
+                try:
+                    checkout(tree, sample.commit)
+                    rows = _rows_for_sample(sample, counter, tree, exclude_dirs)
+                except (CounterError, GitError):
+                    if strict:
+                        raise
+                    failed += 1
+                    _LOG.warning("Skipping %s: counting failed.", sample.commit[:12])
                 else:
-                    empty += 1
-                    _LOG.info(
-                        "%s has no countable languages; it will be re-examined on later runs.",
-                        sample.commit[:12],
-                    )
-            bar.advance(task)
-            if index % flush_every == 0:
+                    if rows:
+                        collected.extend(rows)
+                    else:
+                        empty += 1
+                        _LOG.info(
+                            "%s has no countable languages; it will be re-examined on later runs.",
+                            sample.commit[:12],
+                        )
+                bar.advance(task)
+                if index % flush_every == 0:
+                    flush()
+        finally:
+            # Persist whatever was collected on every way out of the loop,
+            # not just a normal finish: a strict re-raise, an exception
+            # the loop does not catch, and a KeyboardInterrupt must all
+            # leave a valid, resumable file instead of losing every
+            # sample counted since the last periodic flush.  If flush()
+            # itself fails while another exception is already
+            # propagating, that original exception is what the caller
+            # needs to see, so the flush failure is logged rather than
+            # left to replace it.
+            active_exception = sys.exc_info()[1]
+            try:
                 flush()
+            except Exception:
+                if active_exception is None:
+                    raise
+                _LOG.exception("Failed to flush results while handling %r.", active_exception)
 
-    flush()
     final = read_rows(csv_path)
     for_counter = [r for r in final if r.counter == counter.name]
     dates = sorted({r.date for r in for_counter})

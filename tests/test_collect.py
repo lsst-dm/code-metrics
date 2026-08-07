@@ -11,10 +11,11 @@ class StubCounter(LineCounter):
 
     name = "stub"
 
-    def __init__(self, fail_on=None, empty_on=None):
+    def __init__(self, fail_on=None, empty_on=None, raise_on=None):
         super().__init__()
         self.fail_on = fail_on or set()
         self.empty_on = empty_on or set()
+        self.raise_on = raise_on or {}
         self.calls = 0
 
     def _parse_version(self, raw):
@@ -29,6 +30,8 @@ class StubCounter(LineCounter):
 
     def count(self, path, exclude_dirs=()):
         self.calls += 1
+        if self.calls in self.raise_on:
+            raise self.raise_on[self.calls]
         if self.calls in self.fail_on:
             raise CounterError("stub failure")
         if self.calls in self.empty_on:
@@ -103,17 +106,56 @@ def test_a_failing_sample_is_skipped(synthetic_repo, tmp_path):
 
 
 def test_strict_aborts_on_failure(synthetic_repo, tmp_path):
+    kwargs = {
+        "name": "synthetic",
+        "output_dir": tmp_path,
+        "mode": "first-parent",
+        "branch": "main",
+        "progress": False,
+    }
     with pytest.raises(CounterError):
+        collect(str(synthetic_repo), counter=StubCounter(fail_on={2}), strict=True, **kwargs)
+
+    # The sample counted before the failure must have been flushed to
+    # disk, not lost along with the aborted run.
+    rows = read_rows(tmp_path / "synthetic.csv")
+    assert len(rows) == 1
+
+    # A later run must resume from that persisted state rather than
+    # recounting the commit that already succeeded.
+    resumed = StubCounter()
+    collect(str(synthetic_repo), counter=resumed, **kwargs)
+    assert resumed.calls == 2
+
+
+def test_an_uncaught_exception_still_persists_collected_rows(synthetic_repo, tmp_path):
+    with pytest.raises(RuntimeError, match="boom"):
         collect(
             str(synthetic_repo),
             name="synthetic",
             output_dir=tmp_path,
             mode="first-parent",
             branch="main",
-            counter=StubCounter(fail_on={2}),
-            strict=True,
+            counter=StubCounter(raise_on={2: RuntimeError("boom")}),
             progress=False,
         )
+    rows = read_rows(tmp_path / "synthetic.csv")
+    assert len(rows) == 1
+
+
+def test_keyboard_interrupt_still_persists_collected_rows(synthetic_repo, tmp_path):
+    with pytest.raises(KeyboardInterrupt):
+        collect(
+            str(synthetic_repo),
+            name="synthetic",
+            output_dir=tmp_path,
+            mode="first-parent",
+            branch="main",
+            counter=StubCounter(raise_on={2: KeyboardInterrupt()}),
+            progress=False,
+        )
+    rows = read_rows(tmp_path / "synthetic.csv")
+    assert len(rows) == 1
 
 
 def test_empty_sample_list_raises(synthetic_repo, tmp_path):
