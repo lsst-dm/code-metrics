@@ -24,6 +24,13 @@ from .stack import (
 )
 from .worktree import DEFAULT_CACHE_DIR
 
+_LOG = logging.getLogger(__name__)
+
+_MAX_REPORTED_FAILURES = 20
+"""Failed tags shown by name before the summary switches to a count of
+the remainder (`int`).
+"""
+
 
 @click.group()
 @click.version_option()
@@ -149,6 +156,28 @@ def repo_history(
     Console().print(summary_table(result, name or repo))
 
 
+def _format_tag_list(tags: list[str]) -> str:
+    """Render a list of tag names for display in a summary table.
+
+    Parameters
+    ----------
+    tags : `list` [ `str` ]
+        Tags to render, in the order they were attempted.
+
+    Returns
+    -------
+    text : `str`
+        Comma-separated tag names.  If there are more than
+        `_MAX_REPORTED_FAILURES`, the list is truncated and the count of
+        the remainder is appended instead of printing them all.
+    """
+    if len(tags) <= _MAX_REPORTED_FAILURES:
+        return ", ".join(tags)
+    shown = ", ".join(tags[:_MAX_REPORTED_FAILURES])
+    remainder = len(tags) - _MAX_REPORTED_FAILURES
+    return f"{shown}, and {remainder} more"
+
+
 @main.command("stack-scan")
 @click.option(
     "--output-dir",
@@ -205,7 +234,7 @@ def stack_scan(
 
     counter = ClocCounter()
     scanned = 0
-    failed = 0
+    failed_tags: list[str] = []
     for target in pending:
         try:
             scan_target(
@@ -217,16 +246,18 @@ def stack_scan(
                 counter=counter,
             )
             scanned += 1
-        except Exception:
+        except Exception as exc:
             if strict:
                 raise
-            failed += 1
-            logging.getLogger(__name__).warning("Skipping %s: scan failed.", target.tag)
+            failed_tags.append(target.tag)
+            _LOG.warning("Skipping %s: %s: %s", target.tag, type(exc).__name__, exc, exc_info=True)
 
     table = Table(title="Stack scan")
     table.add_column("Measure")
     table.add_column("Value", justify="right")
     table.add_row("Tags scanned", str(scanned))
     table.add_row("Tags skipped", str(len(targets) - len(pending)))
-    table.add_row("Tags failed", str(failed))
+    table.add_row("Tags failed", str(len(failed_tags)))
+    if failed_tags:
+        table.add_row("Failed tags", _format_tag_list(failed_tags))
     console.print(table)
