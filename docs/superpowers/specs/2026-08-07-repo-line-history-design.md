@@ -280,27 +280,51 @@ though `TAGS_STR` began at `w.2015.22`.
 That renaming is what lets the plot treat the whole timeline uniformly, and it
 is curated knowledge that must not be lost.
 
-So `legacy-tags.txt` records the mapping, not just the names:
+So `legacy-tags.txt` records the mapping literally, not just the names:
 
 ```
 # release-tag  weekly-equivalent
-6.1.0.0        w.2013.25
+7.2.0.0        w.2013.25
 ...
 ```
 
-Implementation derives a first draft of the mapping from each release tag's
-`creatordate`, formatted as `w.<ISO year>.<ISO week>`, and checks it against the
-seven files already in `data/`.
-Where the rule reproduces the existing name, it is confirmed; where it does not,
-the existing name is authoritative and gets pinned in the file.
-Ten release tags map onto seven files, so at least one collision or omission
-exists and will surface in exactly this check.
+The mapping is transcribed, not derived.
+Checking the tag history in `lsst_distrib` shows why no rule reproduces it.
+
+Most of these tags point at the same commit.
+`10.1.rc3`, `b128`, `9.0`, and `10.1` all resolve to the commit of 2014-07-13,
+and `7.2.0.0`, `6.2.0.0`, and `6.1.0.4` all resolve to the commit of
+2012-11-16.
+What separates those releases is how `lsst-build` resolves each tag name across
+the package repositories, so `lsst_distrib`'s own commit date carries no
+information about them.
+
+Taking the ISO week of each tag's `taggerdate` accounts for five of the seven
+files: `7.2.0.0` to `w.2013.25`, `9.0` or `9.1` to `w.2014.31`, `9.2` to
+`w.2014.32`, `10.0` to `w.2014.50`, and `10.1` to `w.2015.20`.
+It leaves two unexplained.
+`w.2014.30` matches `b128` exactly, but `b128` is a build tag absent from
+`OLD_TAGS_STR`.
+No tag falls in the week of `w.2014.20` at all; the nearest release, `8.0.0.0`,
+was tagged in week 11.
+`6.1.0.x` and `6.2.0.0` produced no file.
+
+The pairing is therefore editorial judgment about when each release happened,
+and only the author of `data/` can supply it.
+The file is written by hand, with uncertain entries commented as such.
+
+### Legacy results are frozen
 
 These entries sit at the front of the timeline; `--no-legacy` skips them.
-Because their outputs already exist, skip-existing means they do not re-run at
-all unless `--force`, which preserves the curated names by default.
-Any that current `lsst-build` cannot prepare warn and skip rather than ending
-the run.
+
+Because their outputs already exist, skip-existing means they never re-run.
+`--force` alone does not regenerate them: doing so requires `--force-legacy` as
+well.
+
+The seven files are the only record of a mapping that cannot be reconstructed
+from tag metadata, so a careless `--force` must not be able to overwrite them.
+Any legacy tag that current `lsst-build` cannot prepare warns and skips rather
+than ending the run.
 
 ### Existing outputs are skipped
 
@@ -378,7 +402,8 @@ Requires an enabled `lsstsw` environment with `LSST_BUILD_DIR` set, as
 | `--output-dir` | `data` | Where per-tag YAML is written |
 | `--tags-file` | none | Replace the derived tag list, legacy entries included |
 | `--legacy / --no-legacy` | `--legacy` | Include the pre-weekly release tags |
-| `--force` | off | Rescan tags whose YAML already exists |
+| `--force` | off | Rescan tags whose YAML already exists, legacy excluded |
+| `--force-legacy` | off | Also rescan the legacy entries; required with `--force` to touch them |
 | `--strict` | off | Abort on a tag failure instead of skipping |
 
 ### Examples
