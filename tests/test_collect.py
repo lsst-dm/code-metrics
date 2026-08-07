@@ -11,9 +11,10 @@ class StubCounter(LineCounter):
 
     name = "stub"
 
-    def __init__(self, fail_on=None):
+    def __init__(self, fail_on=None, empty_on=None):
         super().__init__()
         self.fail_on = fail_on or set()
+        self.empty_on = empty_on or set()
         self.calls = 0
 
     def _parse_version(self, raw):
@@ -30,6 +31,8 @@ class StubCounter(LineCounter):
         self.calls += 1
         if self.calls in self.fail_on:
             raise CounterError("stub failure")
+        if self.calls in self.empty_on:
+            return {}
         return {"Python": LanguageCount(n_files=1, blank=1, comment=2, code=3)}
 
 
@@ -166,3 +169,43 @@ def test_force_recounts_everything(synthetic_repo, tmp_path):
     result = collect(str(synthetic_repo), counter=counter, force=True, **kwargs)
     assert result.added == 3
     assert counter.calls == 3
+
+
+def test_a_sample_with_no_languages_is_counted_as_empty(synthetic_repo, tmp_path):
+    result = collect(
+        str(synthetic_repo),
+        name="synthetic",
+        output_dir=tmp_path,
+        mode="first-parent",
+        branch="main",
+        counter=StubCounter(empty_on={2}),
+        progress=False,
+    )
+    assert result.empty == 1
+    assert result.added == 2
+    assert result.failed == 0
+    assert result.skipped == 0
+    assert result.added + result.skipped + result.failed + result.empty == 3
+    rows = read_rows(tmp_path / "synthetic.csv")
+    assert len(rows) == 2
+    assert len({r.commit for r in rows}) == 2
+
+
+def test_an_empty_sample_is_re_examined_on_the_next_run(synthetic_repo, tmp_path):
+    kwargs = {
+        "name": "synthetic",
+        "output_dir": tmp_path,
+        "mode": "first-parent",
+        "branch": "main",
+        "progress": False,
+    }
+    first = collect(str(synthetic_repo), counter=StubCounter(empty_on={2}), **kwargs)
+    assert first.empty == 1
+
+    counter = StubCounter()
+    second = collect(str(synthetic_repo), counter=counter, **kwargs)
+    assert counter.calls == 1
+    assert second.added == 1
+    assert second.skipped == 2
+    assert second.empty == 0
+    assert second.added + second.skipped + second.failed + second.empty == 3

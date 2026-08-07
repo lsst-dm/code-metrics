@@ -32,11 +32,16 @@ _LOG = logging.getLogger(__name__)
 
 
 class CollectResult(BaseModel):
-    """Summary of what a collection run did."""
+    """Summary of what a collection run did.
+
+    ``added + skipped + failed + empty`` always equals the number of
+    samples considered for the run.
+    """
 
     added: int
     skipped: int
     failed: int
+    empty: int
     total: int
     languages: list[str]
     first_date: datetime | None
@@ -101,6 +106,15 @@ def collect(
     progress: bool = True,
 ) -> CollectResult:
     """Measure a repository across its history.
+
+    A revision whose tree has no file in any language the counter
+    recognizes stores no row: the CSV records languages, and a
+    language-less revision genuinely has none to record.
+    Such a revision is therefore re-examined on every later run,
+    because the resume check is keyed on the rows a revision
+    produced, and an empty revision produced none.
+    This is deliberate: recounting an empty tree is inexpensive, and
+    fabricating a row to mark it done would corrupt the data instead.
 
     Parameters
     ----------
@@ -167,6 +181,7 @@ def collect(
 
     collected: list[LineRow] = []
     failed = 0
+    empty = 0
 
     def flush() -> None:
         write_rows(csv_path, merge_rows(existing, collected))
@@ -187,12 +202,21 @@ def collect(
         for index, sample in enumerate(pending, start=1):
             try:
                 checkout(tree, sample.commit)
-                collected.extend(_rows_for_sample(sample, counter, tree, exclude_dirs))
+                rows = _rows_for_sample(sample, counter, tree, exclude_dirs)
             except (CounterError, GitError):
                 if strict:
                     raise
                 failed += 1
                 _LOG.warning("Skipping %s: counting failed.", sample.commit[:12])
+            else:
+                if rows:
+                    collected.extend(rows)
+                else:
+                    empty += 1
+                    _LOG.info(
+                        "%s has no countable languages; it will be re-examined on later runs.",
+                        sample.commit[:12],
+                    )
             bar.advance(task)
             if index % flush_every == 0:
                 flush()
@@ -218,6 +242,7 @@ def collect(
         added=len({r.commit for r in collected}),
         skipped=skipped,
         failed=failed,
+        empty=empty,
         total=len({r.commit for r in for_counter}),
         languages=sorted({r.language for r in for_counter}),
         first_date=dates[0] if dates else None,
