@@ -6,6 +6,7 @@ are whatever the tool itself reports; they are never translated between
 backends.
 """
 
+import json
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -204,3 +205,114 @@ class ClocCounter(LineCounter):
             args.append(f"--exclude-dir={','.join(exclude_dirs)}")
         args.extend(str(p) for p in paths)
         self._run(args)
+
+
+class SccCounter(LineCounter):
+    """Line counter backed by scc."""
+
+    name = "scc"
+
+    def _parse_version(self, raw: str) -> str:
+        # scc --version prints "scc version 3.7.0".
+        return raw.strip().split()[-1]
+
+    def parse(self, raw: str) -> dict[str, LanguageCount]:
+        """Convert scc's JSON report into per-language counts.
+
+        See `LineCounter.parse` for the parameters and return value.
+        """
+        data = json.loads(raw)
+        return {
+            entry["Name"]: LanguageCount(
+                n_files=entry["Count"],
+                blank=entry["Blank"],
+                comment=entry["Comment"],
+                code=entry["Code"],
+            )
+            for entry in data
+        }
+
+    def count(self, path: Path, exclude_dirs: Sequence[str] = ()) -> dict[str, LanguageCount]:
+        """Count lines beneath a directory using scc.
+
+        See `LineCounter.count` for the parameters and return value.
+        """
+        args = ["--format", "json"]
+        if exclude_dirs:
+            args.extend(["--exclude-dir", ",".join(exclude_dirs)])
+        args.append(str(path))
+        return self.parse(self._run(args))
+
+
+class TokeiCounter(LineCounter):
+    """Line counter backed by tokei."""
+
+    name = "tokei"
+
+    def _parse_version(self, raw: str) -> str:
+        # tokei --version prints "tokei 14.0.0 compiled with ...".
+        return raw.strip().split()[1]
+
+    def parse(self, raw: str) -> dict[str, LanguageCount]:
+        """Convert tokei's JSON report into per-language counts.
+
+        tokei reports no file count, so it is taken from the length of
+        the per-file report list.
+
+        See `LineCounter.parse` for the parameters and return value.
+        """
+        data = json.loads(raw)
+        return {
+            language: LanguageCount(
+                n_files=len(values["reports"]),
+                blank=values["blanks"],
+                comment=values["comments"],
+                code=values["code"],
+            )
+            for language, values in data.items()
+            if language != "Total"
+        }
+
+    def count(self, path: Path, exclude_dirs: Sequence[str] = ()) -> dict[str, LanguageCount]:
+        """Count lines beneath a directory using tokei.
+
+        See `LineCounter.count` for the parameters and return value.
+        """
+        args = ["--output", "json"]
+        for name in exclude_dirs:
+            args.extend(["--exclude", name])
+        args.append(str(path))
+        return self.parse(self._run(args))
+
+
+COUNTERS: dict[str, type[LineCounter]] = {
+    ClocCounter.name: ClocCounter,
+    SccCounter.name: SccCounter,
+    TokeiCounter.name: TokeiCounter,
+}
+
+
+def get_counter(name: str, executable: str | None = None) -> LineCounter:
+    """Construct a counting backend by name.
+
+    Parameters
+    ----------
+    name : `str`
+        Backend name, one of the keys of `COUNTERS`.
+    executable : `str`, optional
+        Override the program to run.
+
+    Returns
+    -------
+    counter : `LineCounter`
+        Newly constructed backend.
+
+    Raises
+    ------
+    KeyError
+        Raised if the name is not a known backend.
+    """
+    if name not in COUNTERS:
+        known = ", ".join(sorted(COUNTERS))
+        raise KeyError(f"Unknown counter {name!r}. Known counters: {known}.")
+    return COUNTERS[name](executable=executable)
