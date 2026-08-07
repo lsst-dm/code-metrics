@@ -1,8 +1,12 @@
 """The stack-wide scan of lsst_distrib at each release tag.
 
 This is the successor to ``bin/countlines.py``.  It is deliberately fixed
-to cloc, and writes cloc's own report format, so that files produced today
-match those already in ``data/``.
+to cloc, and writes cloc's own report format, so that the per-language and
+SUM blocks produced today match those already in ``data/``.  Those are the
+blocks every consumer reads: `~lsst.codemetrics.counters.ClocCounter.parse`
+discards the header entirely, and the header's own ``elapsed_seconds``,
+``files_per_second``, and ``lines_per_second`` fields necessarily differ
+from run to run.
 """
 
 import logging
@@ -318,7 +322,7 @@ def scan_target(
     output_dir.mkdir(parents=True, exist_ok=True)
     counter.write_report(
         [build_dir / product for product in products],
-        (output_dir / f"{target.output_name}.yaml").resolve(),
+        output_dir / f"{target.output_name}.yaml",
         include_langs=INCLUDE_LANGS,
     )
 

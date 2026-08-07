@@ -1,6 +1,7 @@
 """Command line interface for the code metrics tools."""
 
 import logging
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from rich.table import Table
 
 from .collect import CollectResult, collect
 from .counters import COUNTERS, ClocCounter, get_counter
-from .revisions import MODES
+from .revisions import MODES, GitError
 from .stack import (
     bootstrap_distrib,
     build_targets,
@@ -225,8 +226,15 @@ def stack_scan(
     if tags_file is not None:
         targets = load_tags_file(tags_file)
     else:
-        distrib = bootstrap_distrib(lsstsw_dir, build_dir, lsst_build_exe)
-        targets = build_targets(load_legacy_entries(), discover_weekly_tags(distrib), include_legacy=legacy)
+        try:
+            distrib = bootstrap_distrib(lsstsw_dir, build_dir, lsst_build_exe)
+        except (GitError, subprocess.CalledProcessError) as exc:
+            raise click.ClickException(f"Could not bootstrap lsst_distrib: {exc}") from exc
+        try:
+            weeklies = discover_weekly_tags(distrib)
+        except GitError as exc:
+            raise click.ClickException(f"Could not discover weekly tags: {exc}") from exc
+        targets = build_targets(load_legacy_entries(), weeklies, include_legacy=legacy)
 
     pending = [t for t in targets if should_scan(t, output_dir, force, force_legacy)]
     console = Console()

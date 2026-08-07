@@ -1,8 +1,10 @@
 import logging
+import subprocess
 
 from click.testing import CliRunner
 from lsst.codemetrics import cli
 from lsst.codemetrics.cli import main
+from lsst.codemetrics.revisions import GitError
 from lsst.codemetrics.stack import ScanTarget, should_scan
 
 
@@ -54,6 +56,54 @@ def test_stack_scan_without_environment_fails_clearly(monkeypatch):
     result = CliRunner().invoke(main, ["stack-scan"])
     assert result.exit_code != 0
     assert "lsst_build" in result.output
+
+
+def test_bootstrap_failure_is_reported_cleanly(monkeypatch, tmp_path):
+    monkeypatch.setenv("LSST_BUILD_DIR", str(tmp_path / "lsstsw" / ".lsst-build"))
+
+    def fake_bootstrap_distrib(*args, **kwargs):
+        raise GitError("git fetch --prune --tags origin failed: could not resolve host")
+
+    monkeypatch.setattr(cli, "bootstrap_distrib", fake_bootstrap_distrib)
+
+    result = CliRunner().invoke(main, ["stack-scan"])
+
+    assert result.exit_code != 0
+    assert not isinstance(result.exception, GitError)
+    assert "bootstrap" in result.output.lower()
+    assert "could not resolve host" in result.output
+
+
+def test_bootstrap_subprocess_failure_is_reported_cleanly(monkeypatch, tmp_path):
+    monkeypatch.setenv("LSST_BUILD_DIR", str(tmp_path / "lsstsw" / ".lsst-build"))
+
+    def fake_bootstrap_distrib(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, ["lsst-build", "prepare"])
+
+    monkeypatch.setattr(cli, "bootstrap_distrib", fake_bootstrap_distrib)
+
+    result = CliRunner().invoke(main, ["stack-scan"])
+
+    assert result.exit_code != 0
+    assert not isinstance(result.exception, subprocess.CalledProcessError)
+    assert "bootstrap" in result.output.lower()
+
+
+def test_tag_discovery_failure_is_reported_cleanly(monkeypatch, tmp_path):
+    monkeypatch.setenv("LSST_BUILD_DIR", str(tmp_path / "lsstsw" / ".lsst-build"))
+    monkeypatch.setattr(cli, "bootstrap_distrib", lambda *a, **k: tmp_path / "distrib")
+
+    def fake_discover_weekly_tags(*args, **kwargs):
+        raise GitError("git tag --list w.* failed: not a git repository")
+
+    monkeypatch.setattr(cli, "discover_weekly_tags", fake_discover_weekly_tags)
+
+    result = CliRunner().invoke(main, ["stack-scan"])
+
+    assert result.exit_code != 0
+    assert not isinstance(result.exception, GitError)
+    assert "discover" in result.output.lower()
+    assert "not a git repository" in result.output
 
 
 def test_a_failing_tag_is_logged_with_its_exception_and_named_in_the_summary(monkeypatch, tmp_path, caplog):

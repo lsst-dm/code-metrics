@@ -2,6 +2,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 from lsst.codemetrics.counters import ClocCounter, CounterError, LanguageCount
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -57,3 +58,13 @@ def test_write_report_matches_historical_format(tmp_path):
     text = out.read_text()
     assert "cloc_version" in text
     assert "SUM" in text
+
+
+@pytest.mark.skipif(shutil.which("cloc") is None, reason="cloc not installed")
+def test_write_report_with_a_relative_path_records_a_relative_path(tmp_path, monkeypatch):
+    (tmp_path / "a.py").write_text("import os\n")
+    monkeypatch.chdir(tmp_path)
+    out = Path("report.yaml")
+    ClocCounter().write_report([Path(".")], out, include_langs=["Python"])
+    data = yaml.safe_load(out.read_text())
+    assert data["header"]["report_file"] == "report.yaml"
