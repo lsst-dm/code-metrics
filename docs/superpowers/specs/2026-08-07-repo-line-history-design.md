@@ -322,15 +322,33 @@ is curated knowledge that must not be lost.
 So `legacy-tags.txt` records the mapping literally, not just the names:
 
 ```
-# release-tag  weekly-equivalent
-7.2.0.0        w.2013.25
-8.0.0.0        w.2014.20   # uncertain; see below
-b128           w.2014.30
-9.0            w.2014.31   # 9.1 falls in the same week
-9.2            w.2014.32
-10.0           w.2014.50
-10.1           w.2015.20
+# Pre-weekly formal releases, and the weekly-style names their results were
+# recorded under in data/.
+#
+# Columns: release-tag  output-name  tag-date
+# A '#' begins a comment and runs to end of line.
+#
+# output-name is authoritative. It reproduces the file names already in data/,
+# and where it disagrees with the ISO week of tag-date the comment says so.
+
+7.2.0.0  w.2013.25  2013-06-17
+8.0.0.0  w.2014.20  2014-03-15  # tag date is week 11; w.2014.20 is the recorded name
+b128     w.2014.30  2014-07-22  # build tag, not a formal release
+9.0      w.2014.31  2014-07-31  # 9.1 falls in the same week
+9.2      w.2014.32  2014-08-08
+10.0     w.2014.50  2014-12-09
+10.1     w.2015.20  2015-05-12
 ```
+
+Every entry is live, `8.0.0.0` included.
+Recording it as a working mapping rather than a commented-out uncertainty is
+what makes the legacy results reproducible: `--force-legacy` rescans these tags
+and writes them back under the same names, so the historical curve is
+regenerable even though its naming cannot be re-derived.
+
+The `tag-date` column is not used for anything.
+It documents what the repositories actually record, so the one discrepancy stays
+visible instead of being quietly absorbed into the mapping.
 
 The mapping is transcribed, not derived.
 The tag history shows why no rule reproduces it.
@@ -356,10 +374,11 @@ all of 2014, which is why it appears in the mapping despite being absent from
 `afw` has no tag at all between 2014-05-03 and 2014-07-02, and the whole
 `8.0.0.x` series was tagged in weeks 11 and 12 across every package, so nothing
 falls in week 20.
-`8.0.0.0` is the only unassigned release tag from that year and is the
-presumptive source, but the filename reflects a judgment about when the release
-happened rather than any recorded date.
-That entry stays commented as uncertain.
+`8.0.0.0` is the only unassigned release tag from that year and is recorded as
+the source, with its real tag date carried alongside so the discrepancy is
+documented rather than lost.
+The filename reflects a judgment about when the release happened rather than any
+recorded date.
 
 `6.1.0.0`, `6.1.0.4`, and `6.2.0.0` produced no file and are not in the mapping.
 The latter two are absent from `afw` entirely.
@@ -372,8 +391,12 @@ Because their outputs already exist, skip-existing means they never re-run.
 `--force` alone does not regenerate them: doing so requires `--force-legacy` as
 well.
 
-The seven files are the only record of a mapping that cannot be reconstructed
-from tag metadata, so a careless `--force` must not be able to overwrite them.
+The mapping in `legacy-tags.txt` makes `--force-legacy` safe to use
+deliberately: it rescans each release tag and writes the result back under the
+recorded name, reproducing the same seven files.
+The flag exists because that mapping cannot be re-derived if the file is ever
+lost, so a careless `--force` must not be able to overwrite the only surviving
+copy of the curve it describes.
 Any legacy tag that current `lsst-build` cannot prepare warns and skips rather
 than ending the run.
 
