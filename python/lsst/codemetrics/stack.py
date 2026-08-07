@@ -321,3 +321,33 @@ def scan_target(
         (output_dir / f"{target.output_name}.yaml").resolve(),
         include_langs=INCLUDE_LANGS,
     )
+
+
+def should_scan(target: ScanTarget, output_dir: Path, force: bool, force_legacy: bool) -> bool:
+    """Decide whether a target needs scanning.
+
+    Legacy results are protected from ``--force`` alone.  Their mapping
+    from release tag to recorded name cannot be re-derived, so overwriting
+    them has to be asked for explicitly.
+
+    Parameters
+    ----------
+    target : `ScanTarget`
+        Target under consideration.
+    output_dir : `~pathlib.Path`
+        Directory reports are written to.
+    force : `bool`
+        Rescan targets whose report already exists.
+    force_legacy : `bool`
+        Extend ``force`` to the pre-weekly releases.
+
+    Returns
+    -------
+    scan : `bool`
+        `True` if the target should be scanned.
+    """
+    if not (output_dir / f"{target.output_name}.yaml").exists():
+        return True
+    if target.legacy:
+        return force and force_legacy
+    return force

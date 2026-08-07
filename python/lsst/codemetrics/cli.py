@@ -10,8 +10,18 @@ from rich.logging import RichHandler
 from rich.table import Table
 
 from .collect import CollectResult, collect
-from .counters import COUNTERS, get_counter
+from .counters import COUNTERS, ClocCounter, get_counter
 from .revisions import MODES
+from .stack import (
+    bootstrap_distrib,
+    build_targets,
+    discover_weekly_tags,
+    load_legacy_entries,
+    load_tags_file,
+    lsstsw_paths,
+    scan_target,
+    should_scan,
+)
 from .worktree import DEFAULT_CACHE_DIR
 
 
@@ -137,3 +147,86 @@ def repo_history(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     Console().print(summary_table(result, name or repo))
+
+
+@main.command("stack-scan")
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("data"),
+    show_default=True,
+    help="Directory to write per-tag reports into.",
+)
+@click.option(
+    "--tags-file",
+    type=click.Path(dir_okay=False, exists=True, path_type=Path),
+    default=None,
+    help="Replace the derived tag list, legacy entries included.",
+)
+@click.option(
+    "--legacy/--no-legacy",
+    default=True,
+    show_default=True,
+    help="Include the pre-weekly release tags.",
+)
+@click.option("--force", is_flag=True, help="Rescan tags whose report already exists.")
+@click.option(
+    "--force-legacy",
+    is_flag=True,
+    help="Extend --force to the pre-weekly releases, overwriting curated names.",
+)
+@click.option("--strict", is_flag=True, help="Abort on the first failure instead of skipping it.")
+def stack_scan(
+    output_dir: Path,
+    tags_file: Path | None,
+    legacy: bool,
+    force: bool,
+    force_legacy: bool,
+    strict: bool,
+) -> None:
+    """Count lines across lsst_distrib at each release tag.
+
+    Requires an lsstsw environment with LSST_BUILD_DIR set.
+    """
+    try:
+        lsstsw_dir, build_dir, lsst_build_exe = lsstsw_paths()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if tags_file is not None:
+        targets = load_tags_file(tags_file)
+    else:
+        distrib = bootstrap_distrib(lsstsw_dir, build_dir, lsst_build_exe)
+        targets = build_targets(load_legacy_entries(), discover_weekly_tags(distrib), include_legacy=legacy)
+
+    pending = [t for t in targets if should_scan(t, output_dir, force, force_legacy)]
+    console = Console()
+    console.print(f"{len(pending)} of {len(targets)} tags need scanning.")
+
+    counter = ClocCounter()
+    scanned = 0
+    failed = 0
+    for target in pending:
+        try:
+            scan_target(
+                target,
+                lsstsw_dir=lsstsw_dir,
+                build_dir=build_dir,
+                lsst_build_exe=lsst_build_exe,
+                output_dir=output_dir,
+                counter=counter,
+            )
+            scanned += 1
+        except Exception:
+            if strict:
+                raise
+            failed += 1
+            logging.getLogger(__name__).warning("Skipping %s: scan failed.", target.tag)
+
+    table = Table(title="Stack scan")
+    table.add_column("Measure")
+    table.add_column("Value", justify="right")
+    table.add_row("Tags scanned", str(scanned))
+    table.add_row("Tags skipped", str(len(targets) - len(pending)))
+    table.add_row("Tags failed", str(failed))
+    console.print(table)
