@@ -171,17 +171,33 @@ def select(
     return result
 
 
-def top_languages(frame: pd.DataFrame, n: int = 5, value: str = "code") -> pd.DataFrame:
-    """Keep only the largest languages, so a plot stays readable.
+def top_series(
+    frame: pd.DataFrame,
+    n: int = 10,
+    values: Sequence[str] = ("code", "comment"),
+) -> list[tuple[str, str]]:
+    """Choose which lines to draw, so a plot stays readable.
 
-    A repository of any size reports enough languages that plotting them
-    all buries the figure under its own legend.
+    A repository of any size reports enough languages that drawing every
+    one buries the figure under its own legend.
 
-    Languages are ranked by the largest value they ever reach, not by
-    their most recent one, so a subsystem that grew and was later removed
-    still appears.  That rise and fall is usually the most interesting
-    part of a history plot, and ranking on the final revision alone would
-    discard it.
+    The unit of choice is a series, a language paired with a measure,
+    rather than a language alone.  A language is not uniformly
+    interesting across measures: JSON cannot carry comments at all, so
+    its comment series is flat zero and tells the reader nothing, while
+    Markdown is entirely comment and has no code series worth drawing.
+    Ranking languages by their code alone would keep the first and drop
+    the second, spending a slot on a dead line and discarding real
+    content.
+
+    A series whose peak is zero is never returned, whatever ``n`` is.
+    It has nothing to show, so the slot goes to the next real series.
+
+    Series are ranked by the largest value they ever reach, not by their
+    most recent one, so a subsystem that grew and was later removed still
+    appears.  That rise and fall is usually the most interesting part of
+    a history plot, and ranking on the final revision alone would discard
+    it.
 
     Apply this after `apply_aliases`, so that languages folded together
     are ranked on their combined size.
@@ -191,15 +207,15 @@ def top_languages(frame: pd.DataFrame, n: int = 5, value: str = "code") -> pd.Da
     frame : `pandas.DataFrame`
         Long-format counts.
     n : `int`, optional
-        How many languages to keep.  A frame with fewer languages than
-        this is returned unchanged.
-    value : `str`, optional
-        Column to rank on, such as ``code``, ``comment``, or ``lines``.
+        How many series to draw at most.
+    values : `~collections.abc.Sequence` [ `str` ], optional
+        Measures to consider, such as ``code``, ``comment``, or
+        ``lines``.
 
     Returns
     -------
-    frame : `pandas.DataFrame`
-        Counts for the kept languages, at every revision they appear in.
+    series : `list` [ `tuple` [ `str`, `str` ] ]
+        Language and measure pairs, largest peak first.
 
     Raises
     ------
@@ -209,13 +225,18 @@ def top_languages(frame: pd.DataFrame, n: int = 5, value: str = "code") -> pd.Da
     if n < 1:
         raise ValueError(f"n must be at least 1, got {n}.")
     if frame.empty:
-        return frame
-    peaks = frame.groupby("language")[value].max()
-    # Sort by name first so that languages tied on their peak are chosen
-    # in a stable order rather than by however the rows happened to
-    # arrive.
-    ranked = peaks.sort_index().sort_values(ascending=False, kind="stable")
-    return frame[frame["language"].isin(ranked.head(n).index)]
+        return []
+    ranked = []
+    for value in values:
+        for language, peak in frame.groupby("language")[value].max().items():
+            if peak > 0:
+                ranked.append((peak, language, value))
+    # Sort by name and measure first so that series tied on their peak
+    # are chosen in a stable order rather than by however the rows
+    # happened to arrive.
+    ranked.sort(key=lambda item: (item[1], item[2]))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [(language, value) for _, language, value in ranked[:n]]
 
 
 def pivot(frame: pd.DataFrame, value: str = "code") -> pd.DataFrame:

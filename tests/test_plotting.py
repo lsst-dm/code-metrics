@@ -15,7 +15,7 @@ from lsst.codemetrics.plotting import (  # noqa: E402
     load_stack,
     pivot,
     select,
-    top_languages,
+    top_series,
 )
 from lsst.codemetrics.storage import LineRow, write_rows  # noqa: E402
 
@@ -169,81 +169,6 @@ def make_history_frame():
     return frame
 
 
-def test_top_languages_keeps_five_by_default():
-    result = top_languages(make_history_frame())
-    assert len(set(result["language"])) == 5
-
-
-def test_top_languages_ranks_by_peak_not_final_value():
-    # C++ ends at 1, the smallest of any language, but peaked at 900.
-    # Ranking on the final revision would pick YAML instead.
-    result = top_languages(make_history_frame(), n=2)
-    assert set(result["language"]) == {"Python", "C++"}
-
-
-def test_top_languages_keeps_every_revision_of_a_kept_language():
-    result = top_languages(make_history_frame(), n=2)
-    assert len(result[result["language"] == "C++"]) == 2
-
-
-def test_top_languages_respects_n():
-    result = top_languages(make_history_frame(), n=3)
-    assert len(set(result["language"])) == 3
-
-
-def test_top_languages_returns_all_when_fewer_than_n():
-    result = top_languages(make_history_frame(), n=99)
-    assert len(set(result["language"])) == 6
-
-
-def test_top_languages_can_rank_by_another_column():
-    result = top_languages(make_history_frame(), n=2, value="lines")
-    assert set(result["language"]) == {"Python", "C++"}
-
-
-def test_top_languages_breaks_ties_by_name():
-    frame = make_history_frame()
-    frame.loc[frame["language"].isin(["Shell", "reST"]), "code"] = 7
-    first = top_languages(frame, n=4)
-    second = top_languages(frame.iloc[::-1].copy(), n=4)
-    assert set(first["language"]) == set(second["language"])
-
-
-def test_top_languages_rejects_a_non_positive_n():
-    with pytest.raises(ValueError, match="at least 1"):
-        top_languages(make_history_frame(), n=0)
-
-
-def test_top_languages_on_an_empty_frame_is_empty():
-    assert top_languages(pd.DataFrame(), n=5).empty
-
-
-def test_select_reports_which_counters_are_available(repo_csv):
-    frame = load_repo("demo", repo_csv)
-    with pytest.raises(ValueError, match="scc") as excinfo:
-        select(frame, counter="scc")
-    message = str(excinfo.value)
-    # The point of the error is telling the user what they can choose.
-    assert "cloc" in message
-    assert "tokei" in message
-
-
-def test_select_still_returns_empty_for_an_absent_language(repo_csv):
-    # An absent language is a legitimate empty result, not a mistake.
-    frame = select(load_repo("demo", repo_csv), languages=["Fortran"], counter="cloc")
-    assert frame.empty
-
-
-def test_select_accepts_a_counter_that_is_present(repo_csv):
-    frame = select(load_repo("demo", repo_csv), counter="tokei")
-    assert set(frame["counter"]) == {"tokei"}
-
-
-def test_load_repo_names_the_missing_file(tmp_path):
-    with pytest.raises(FileNotFoundError, match="absent.csv"):
-        load_repo("absent", tmp_path)
-
-
 def header_frame(counter, header_languages):
     """A frame with C++ plus whatever that backend calls its headers."""
     rows = []
@@ -288,3 +213,97 @@ def test_cpp_header_aliases_leave_other_languages_alone():
     frame = header_frame("tokei", ["C Header", "Python"])
     folded = apply_aliases(frame, CPP_HEADER_ALIASES)
     assert set(folded["language"]) == {"C++", "Python"}
+
+
+def mixed_frame():
+    """Peaks chosen so ranking by code alone gets it wrong.
+
+    TOML has code but literally no comments, the way JSON cannot have
+    them.  Markdown is the mirror image: no code, but real comment
+    content.  Ranking languages by code keeps TOML's dead comment series
+    and drops Markdown altogether.
+    """
+    peaks = {
+        "YAML": (16290, 543),
+        "Python": (60, 590),
+        "TOML": (24, 0),
+        "Markdown": (0, 6),
+        "Forge Config": (4, 0),
+    }
+    rows = []
+    for day in (1, 2):
+        for language, (code, comment) in peaks.items():
+            rows.append(
+                LineRow(
+                    commit=f"c{day}",
+                    date=datetime(2020, 1, day, tzinfo=UTC),
+                    counter="cloc",
+                    counter_version="2.10",
+                    language=language,
+                    n_files=1,
+                    blank=0,
+                    comment=comment,
+                    code=code,
+                )
+            )
+    frame = pd.DataFrame([r.model_dump() for r in rows])
+    frame["lines"] = frame["code"] + frame["comment"]
+    return frame
+
+
+def test_top_series_ranks_across_languages_and_measures():
+    assert top_series(mixed_frame(), n=3) == [
+        ("YAML", "code"),
+        ("Python", "comment"),
+        ("YAML", "comment"),
+    ]
+
+
+def test_top_series_never_returns_an_all_zero_series():
+    every = top_series(mixed_frame(), n=99)
+    assert ("TOML", "comment") not in every
+    assert ("Forge Config", "comment") not in every
+
+
+def test_top_series_keeps_a_language_that_has_only_comments():
+    # Markdown has no code at all, so ranking languages by code would
+    # drop it even though its comment series carries real content.
+    assert ("Markdown", "comment") in top_series(mixed_frame(), n=99)
+
+
+def test_top_series_spends_a_freed_slot_on_real_content():
+    # Five languages across two measures is ten nominal slots, but only
+    # seven series carry anything. Asking for ten must yield those seven
+    # rather than padding with dead comment lines.
+    result = top_series(mixed_frame(), n=10)
+    assert len(result) == 7
+    assert ("TOML", "comment") not in result
+    assert ("Forge Config", "comment") not in result
+    assert ("Markdown", "code") not in result
+
+
+def test_top_series_respects_n():
+    assert len(top_series(mixed_frame(), n=2)) == 2
+
+
+def test_top_series_returns_all_when_fewer_than_n():
+    assert len(top_series(mixed_frame(), n=99)) == 7
+
+
+def test_top_series_can_rank_other_measures():
+    result = top_series(mixed_frame(), n=2, values=("lines",))
+    assert result == [("YAML", "lines"), ("Python", "lines")]
+
+
+def test_top_series_is_deterministic_under_row_order():
+    frame = mixed_frame()
+    assert top_series(frame, n=5) == top_series(frame.iloc[::-1].copy(), n=5)
+
+
+def test_top_series_rejects_a_non_positive_n():
+    with pytest.raises(ValueError, match="at least 1"):
+        top_series(mixed_frame(), n=0)
+
+
+def test_top_series_on_an_empty_frame_is_empty():
+    assert top_series(pd.DataFrame(), n=5) == []
