@@ -216,3 +216,29 @@ def test_top_languages_rejects_a_non_positive_n():
 
 def test_top_languages_on_an_empty_frame_is_empty():
     assert top_languages(pd.DataFrame(), n=5).empty
+
+
+def test_select_reports_which_counters_are_available(repo_csv):
+    frame = load_repo("demo", repo_csv)
+    with pytest.raises(ValueError, match="scc") as excinfo:
+        select(frame, counter="scc")
+    message = str(excinfo.value)
+    # The point of the error is telling the user what they can choose.
+    assert "cloc" in message
+    assert "tokei" in message
+
+
+def test_select_still_returns_empty_for_an_absent_language(repo_csv):
+    # An absent language is a legitimate empty result, not a mistake.
+    frame = select(load_repo("demo", repo_csv), languages=["Fortran"], counter="cloc")
+    assert frame.empty
+
+
+def test_select_accepts_a_counter_that_is_present(repo_csv):
+    frame = select(load_repo("demo", repo_csv), counter="tokei")
+    assert set(frame["counter"]) == {"tokei"}
+
+
+def test_load_repo_names_the_missing_file(tmp_path):
+    with pytest.raises(FileNotFoundError, match="absent.csv"):
+        load_repo("absent", tmp_path)

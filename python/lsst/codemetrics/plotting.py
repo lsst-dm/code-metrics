@@ -37,8 +37,18 @@ def load_repo(name: str, output_dir: Path = Path("data/repos")) -> pd.DataFrame:
     -------
     frame : `pandas.DataFrame`
         Long-format counts with a derived ``lines`` column.
+
+    Raises
+    ------
+    FileNotFoundError
+        Raised if no CSV exists for that name.
     """
-    rows = read_rows(output_dir / f"{name}.csv")
+    path = output_dir / f"{name}.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No counts found at {path}. Collect them with: code-metrics repo-history <repo>"
+        )
+    rows = read_rows(path)
     frame = pd.DataFrame([row.model_dump() for row in rows])
     if frame.empty:
         return frame
@@ -96,6 +106,14 @@ def select(
     frame : `pandas.DataFrame`
         Filtered counts.
 
+    Raises
+    ------
+    ValueError
+        Raised if the named backend produced none of the stored rows.
+        Filtering it away silently would leave an empty frame that plots
+        as a blank figure, with nothing to say which backend was wanted
+        or which are actually present.
+
     Warns
     -----
     UserWarning
@@ -103,9 +121,14 @@ def select(
         none was chosen, since summing across backends is meaningless.
     """
     result = frame
+    if result.empty:
+        return result
     if counter is not None:
         result = result[result["counter"] == counter]
-    elif not result.empty and result["counter"].nunique() > 1:
+        if result.empty:
+            available = ", ".join(sorted(frame["counter"].unique()))
+            raise ValueError(f"No rows counted by {counter!r}. This data was counted by: {available}.")
+    elif result["counter"].nunique() > 1:
         found = ", ".join(sorted(result["counter"].unique()))
         warnings.warn(
             f"Frame holds results from more than one counter ({found}). Pass counter= to choose one.",
