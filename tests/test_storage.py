@@ -1,3 +1,4 @@
+import csv
 from datetime import UTC, datetime
 
 import pytest
@@ -69,6 +70,38 @@ def test_incremental_write_only_appends(tmp_path):
     write_rows(path, [make_row(commit="a", day=1), make_row(commit="b", day=2)])
     second = path.read_text()
     assert second.startswith(first)
+
+
+def test_write_rows_survives_a_failure_partway_through_serialization(tmp_path, monkeypatch):
+    path = tmp_path / "repo.csv"
+    write_rows(path, [make_row(commit="a", day=1)])
+    original = path.read_text()
+
+    real_writerow = csv.DictWriter.writerow
+    calls = {"n": 0}
+
+    def flaky_writerow(self, rowdict):
+        # Header is call 1; the third data row (call 4) fails, so two
+        # data rows have already been serialized when the error hits.
+        calls["n"] += 1
+        if calls["n"] == 4:
+            raise RuntimeError("boom")
+        return real_writerow(self, rowdict)
+
+    monkeypatch.setattr(csv.DictWriter, "writerow", flaky_writerow)
+
+    with pytest.raises(RuntimeError):
+        write_rows(
+            path,
+            [
+                make_row(commit="a", day=1),
+                make_row(commit="b", day=2),
+                make_row(commit="c", day=3),
+            ],
+        )
+
+    assert path.read_text() == original
+    assert read_rows(path) == [make_row(commit="a", day=1)]
 
 
 def test_collected_keys_pairs_commit_with_counter():

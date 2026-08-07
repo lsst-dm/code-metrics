@@ -2,14 +2,22 @@
 
 Records are stored in long format, one row per sample and language, so
 that a language appearing for the first time adds rows rather than
-columns.  Rows are kept sorted by date so an incremental run appends to
-the end of the file and produces a small difference.
+columns.  Rows are kept sorted by date.  A normal incremental run,
+where every newly collected sample is chronologically later than
+everything already stored, therefore appends to the end of the file
+and produces a small difference; recounting existing history under a
+different counter interleaves old and new rows by date across the
+whole file instead.
 """
 
+import contextlib
 import csv
-from collections.abc import Iterable
+import os
+import tempfile
+from collections.abc import Iterable, Iterator
 from datetime import datetime
 from pathlib import Path
+from typing import IO
 
 import yaml
 from pydantic import BaseModel
@@ -71,6 +79,42 @@ def _sort_key(row: LineRow) -> tuple[datetime, str, str]:
     return (row.date, row.commit, row.language)
 
 
+@contextlib.contextmanager
+def _atomic_create(path: Path, newline: str | None = None) -> Iterator[IO[str]]:
+    """Write to a temporary file, then atomically replace the destination.
+
+    The destination is left untouched until the caller's block
+    completes without raising, so a process that dies or an exception
+    that is raised partway through serialization cannot truncate or
+    corrupt content already persisted at `path`.
+
+    Parameters
+    ----------
+    path : `~pathlib.Path`
+        Final destination.  Only replaced once the caller's block
+        succeeds.
+    newline : `str` or `None`, optional
+        Newline argument passed to `open`.
+
+    Yields
+    ------
+    fd : `~typing.IO`
+        Writable text file, backed by a temporary file created in the
+        same directory as `path` so the final replace is atomic.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(handle, "w", newline=newline) as fd:
+            yield fd
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    else:
+        os.replace(tmp_path, path)
+
+
 def read_rows(path: Path) -> list[LineRow]:
     """Read stored records.
 
@@ -93,6 +137,11 @@ def read_rows(path: Path) -> list[LineRow]:
 def write_rows(path: Path, rows: Iterable[LineRow]) -> None:
     """Write records, sorted canonically.
 
+    The write is atomic: it cannot leave `path` truncated or holding a
+    partial CSV body if serialization fails or the process is
+    interrupted, since the previous content is only replaced once the
+    new content has been fully written.
+
     Parameters
     ----------
     path : `~pathlib.Path`
@@ -100,8 +149,7 @@ def write_rows(path: Path, rows: Iterable[LineRow]) -> None:
     rows : `~collections.abc.Iterable` [ `LineRow` ]
         Records to store.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="") as fd:
+    with _atomic_create(path, newline="") as fd:
         writer = csv.DictWriter(fd, fieldnames=COLUMNS)
         writer.writeheader()
         for row in sorted(rows, key=_sort_key):
@@ -157,6 +205,8 @@ def merge_rows(existing: Iterable[LineRow], new: Iterable[LineRow]) -> list[Line
 def write_meta(path: Path, meta: RepoMeta) -> None:
     """Write the sidecar description of a collection run.
 
+    The write is atomic, for the same reason as `write_rows`.
+
     Parameters
     ----------
     path : `~pathlib.Path`
@@ -164,5 +214,5 @@ def write_meta(path: Path, meta: RepoMeta) -> None:
     meta : `RepoMeta`
         Description to store.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(meta.model_dump(), sort_keys=False))
+    with _atomic_create(path) as fd:
+        fd.write(yaml.safe_dump(meta.model_dump(), sort_keys=False))
