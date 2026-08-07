@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from lsst.codemetrics.revisions import GitError, git_output
 from lsst.codemetrics.worktree import (
@@ -56,11 +58,25 @@ def test_checkout_removes_untracked_leftovers(synthetic_repo):
     head = git_output(synthetic_repo, "rev-parse", "main")
     with temporary_worktree(synthetic_repo) as tree:
         checkout(tree, head)
+
+        # A linked worktree shares the common git directory's
+        # info/exclude, so a rule written there makes a name genuinely
+        # ignored without touching any tracked content.  This is what
+        # distinguishes the ignored case from a plain untracked file:
+        # only "-x" removes something git considers ignored.
+        common_dir = Path(git_output(tree, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+        exclude_file = common_dir / "info" / "exclude"
+        with exclude_file.open("a") as handle:
+            handle.write("build.log\n")
+
         stray = tree / "stray.py"
         stray.write_text("x = 1\n")
         ignored = tree / "build.log"
         ignored.write_text("noise\n")
+        assert git_output(tree, "check-ignore", "build.log") == "build.log"
+
         checkout(tree, head)
+
         assert not stray.exists()
         assert not ignored.exists()
 
