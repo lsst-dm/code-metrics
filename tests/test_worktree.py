@@ -24,6 +24,27 @@ def test_repo_name_strips_dot_git():
     assert repo_name("/some/path/afw/") == "afw"
 
 
+def test_repo_name_keeps_url_behaviour_unchanged():
+    assert repo_name("https://github.com/lsst/daf_butler.git") == "daf_butler"
+    assert repo_name("git@github.com:lsst/afw.git") == "afw"
+
+
+def test_repo_name_resolves_dot_and_dot_dot():
+    assert repo_name(".") == Path.cwd().name
+    assert repo_name("..") == Path.cwd().parent.name
+
+
+def test_repo_name_resolves_relative_path_with_trailing_slash(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "afw").mkdir()
+    assert repo_name("afw/") == "afw"
+
+
+def test_repo_name_root_path_is_rejected():
+    with pytest.raises(ValueError):
+        repo_name("/")
+
+
 def test_ensure_source_returns_local_path_unchanged(synthetic_repo, tmp_path):
     assert ensure_source(str(synthetic_repo), tmp_path / "cache") == synthetic_repo
 

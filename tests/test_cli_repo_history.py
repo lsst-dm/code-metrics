@@ -33,6 +33,21 @@ def test_repo_history_runs_against_a_local_repo(synthetic_repo, tmp_path):
     assert "synthetic" in result.output
 
 
+@pytest.mark.skipif(shutil.which("cloc") is None, reason="cloc not installed")
+def test_repo_history_dot_argument_names_output_after_the_directory(synthetic_repo, tmp_path, monkeypatch):
+    # `repo-history .` is an obvious way to invoke the command, and it
+    # must produce a CSV named after the repository's own directory
+    # rather than a literal "." (see worktree.repo_name).
+    monkeypatch.chdir(synthetic_repo)
+    result = CliRunner().invoke(
+        main,
+        ["repo-history", ".", "--output-dir", str(tmp_path), "--branch", "main"],
+    )
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "synthetic.csv").exists()
+    assert not (tmp_path / "..csv").exists()
+
+
 def test_unknown_counter_is_rejected():
     result = CliRunner().invoke(main, ["repo-history", ".", "--counter", "nope"])
     assert result.exit_code != 0

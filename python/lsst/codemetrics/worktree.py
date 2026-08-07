@@ -34,6 +34,11 @@ def is_url(target: str) -> bool:
 def repo_name(target: str) -> str:
     """Derive a short name from a repository path or URL.
 
+    A URL keeps its final path segment with any ``.git`` suffix
+    removed.  A local path is resolved first, so relative forms such
+    as ``.``, ``..``, and ``some/dir/`` all yield the repository's
+    actual directory name instead of a literal ``.`` or ``..``.
+
     Parameters
     ----------
     target : `str`
@@ -43,10 +48,22 @@ def repo_name(target: str) -> str:
     -------
     name : `str`
         Final path component without any ``.git`` suffix.
+
+    Raises
+    ------
+    ValueError
+        Raised if a local path resolves to a name-less location, such
+        as the filesystem root.
     """
-    trimmed = target.rstrip("/")
-    base = trimmed.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
-    return base.removesuffix(".git")
+    if is_url(target):
+        trimmed = target.rstrip("/")
+        base = trimmed.rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+        return base.removesuffix(".git")
+
+    resolved = Path(target).expanduser().resolve()
+    if not resolved.name:
+        raise ValueError(f"Cannot derive a repository name from {target!r}: resolves to {resolved}.")
+    return resolved.name
 
 
 def ensure_source(target: str, cache_dir: Path) -> Path:
