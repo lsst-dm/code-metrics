@@ -126,8 +126,8 @@ def _atomic_create(path: Path, newline: str | None = None) -> Iterator[IO[str]]:
     handle, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     tmp_path = Path(tmp_name)
     try:
-        os.fchmod(handle, mode)
         with os.fdopen(handle, "w", newline=newline) as fd:
+            os.fchmod(fd.fileno(), mode)
             yield fd
     except BaseException:
         tmp_path.unlink(missing_ok=True)

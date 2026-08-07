@@ -1,4 +1,5 @@
 import csv
+import os
 import stat
 from datetime import UTC, datetime
 
@@ -130,6 +131,29 @@ def test_write_rows_preserves_an_existing_files_mode(tmp_path):
     path.chmod(0o640)
     write_rows(path, [make_row(commit="a", day=1), make_row(commit="b", day=2)])
     assert stat.S_IMODE(path.stat().st_mode) == 0o640
+
+
+def test_write_rows_does_not_leak_a_descriptor_when_fchmod_fails(tmp_path, monkeypatch):
+    path = tmp_path / "repo.csv"
+    write_rows(path, [make_row(commit="a", day=1)])
+    original = path.read_text()
+
+    def raising_fchmod(fd, mode):
+        raise OSError("boom")
+
+    monkeypatch.setattr(os, "fchmod", raising_fchmod)
+
+    fd_count_before = len(os.listdir("/dev/fd"))
+
+    with pytest.raises(OSError):
+        write_rows(path, [make_row(commit="a", day=1), make_row(commit="b", day=2)])
+
+    fd_count_after = len(os.listdir("/dev/fd"))
+
+    assert fd_count_after == fd_count_before
+    assert path.read_text() == original
+    leftovers = [p.name for p in tmp_path.iterdir() if p.name.startswith(f".{path.name}.")]
+    assert leftovers == []
 
 
 def test_collected_keys_pairs_commit_with_counter():
