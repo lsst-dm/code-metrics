@@ -7,6 +7,7 @@ import yaml
 
 pytest.importorskip("pandas")
 
+import pandas as pd  # noqa: E402
 from lsst.codemetrics.plotting import (  # noqa: E402
     CLOC_CPP_ALIASES,
     apply_aliases,
@@ -14,6 +15,7 @@ from lsst.codemetrics.plotting import (  # noqa: E402
     load_stack,
     pivot,
     select,
+    top_languages,
 )
 from lsst.codemetrics.storage import LineRow, write_rows  # noqa: E402
 
@@ -137,3 +139,80 @@ def test_load_stack_resolves_the_week_53_collision(tmp_path):
     assert dates[0] == pytest.approx(2016.0 + 52.0 / 53.0)
     assert dates[1] == pytest.approx(2017.0)
     assert dates[0] != pytest.approx(dates[1])
+
+
+def make_history_frame():
+    """Two revisions; C++ peaks early then shrinks, YAML stays tiny."""
+    rows = []
+    # C++ ends smaller than every other language, so ranking on the final
+    # revision would drop it; ranking on its peak of 900 must keep it.
+    for day, sizes in (
+        (1, {"Python": 100, "C++": 900, "YAML": 5, "Shell": 3, "reST": 2, "CMake": 1}),
+        (2, {"Python": 800, "C++": 1, "YAML": 6, "Shell": 4, "reST": 3, "CMake": 2}),
+    ):
+        for language, code in sizes.items():
+            rows.append(
+                LineRow(
+                    commit=f"c{day}",
+                    date=datetime(2020, 1, day, tzinfo=UTC),
+                    counter="cloc",
+                    counter_version="2.10",
+                    language=language,
+                    n_files=1,
+                    blank=1,
+                    comment=code // 2,
+                    code=code,
+                )
+            )
+    frame = pd.DataFrame([r.model_dump() for r in rows])
+    frame["lines"] = frame["code"] + frame["comment"]
+    return frame
+
+
+def test_top_languages_keeps_five_by_default():
+    result = top_languages(make_history_frame())
+    assert len(set(result["language"])) == 5
+
+
+def test_top_languages_ranks_by_peak_not_final_value():
+    # C++ ends at 1, the smallest of any language, but peaked at 900.
+    # Ranking on the final revision would pick YAML instead.
+    result = top_languages(make_history_frame(), n=2)
+    assert set(result["language"]) == {"Python", "C++"}
+
+
+def test_top_languages_keeps_every_revision_of_a_kept_language():
+    result = top_languages(make_history_frame(), n=2)
+    assert len(result[result["language"] == "C++"]) == 2
+
+
+def test_top_languages_respects_n():
+    result = top_languages(make_history_frame(), n=3)
+    assert len(set(result["language"])) == 3
+
+
+def test_top_languages_returns_all_when_fewer_than_n():
+    result = top_languages(make_history_frame(), n=99)
+    assert len(set(result["language"])) == 6
+
+
+def test_top_languages_can_rank_by_another_column():
+    result = top_languages(make_history_frame(), n=2, value="lines")
+    assert set(result["language"]) == {"Python", "C++"}
+
+
+def test_top_languages_breaks_ties_by_name():
+    frame = make_history_frame()
+    frame.loc[frame["language"].isin(["Shell", "reST"]), "code"] = 7
+    first = top_languages(frame, n=4)
+    second = top_languages(frame.iloc[::-1].copy(), n=4)
+    assert set(first["language"]) == set(second["language"])
+
+
+def test_top_languages_rejects_a_non_positive_n():
+    with pytest.raises(ValueError, match="at least 1"):
+        top_languages(make_history_frame(), n=0)
+
+
+def test_top_languages_on_an_empty_frame_is_empty():
+    assert top_languages(pd.DataFrame(), n=5).empty

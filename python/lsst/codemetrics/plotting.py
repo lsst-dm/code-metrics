@@ -117,6 +117,53 @@ def select(
     return result
 
 
+def top_languages(frame: pd.DataFrame, n: int = 5, value: str = "code") -> pd.DataFrame:
+    """Keep only the largest languages, so a plot stays readable.
+
+    A repository of any size reports enough languages that plotting them
+    all buries the figure under its own legend.
+
+    Languages are ranked by the largest value they ever reach, not by
+    their most recent one, so a subsystem that grew and was later removed
+    still appears.  That rise and fall is usually the most interesting
+    part of a history plot, and ranking on the final revision alone would
+    discard it.
+
+    Apply this after `apply_aliases`, so that languages folded together
+    are ranked on their combined size.
+
+    Parameters
+    ----------
+    frame : `pandas.DataFrame`
+        Long-format counts.
+    n : `int`, optional
+        How many languages to keep.  A frame with fewer languages than
+        this is returned unchanged.
+    value : `str`, optional
+        Column to rank on, such as ``code``, ``comment``, or ``lines``.
+
+    Returns
+    -------
+    frame : `pandas.DataFrame`
+        Counts for the kept languages, at every revision they appear in.
+
+    Raises
+    ------
+    ValueError
+        Raised if ``n`` is less than 1.
+    """
+    if n < 1:
+        raise ValueError(f"n must be at least 1, got {n}.")
+    if frame.empty:
+        return frame
+    peaks = frame.groupby("language")[value].max()
+    # Sort by name first so that languages tied on their peak are chosen
+    # in a stable order rather than by however the rows happened to
+    # arrive.
+    ranked = peaks.sort_index().sort_values(ascending=False, kind="stable")
+    return frame[frame["language"].isin(ranked.head(n).index)]
+
+
 def pivot(frame: pd.DataFrame, value: str = "code") -> pd.DataFrame:
     """Reshape counts into one column per language.
 
