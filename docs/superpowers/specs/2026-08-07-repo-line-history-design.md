@@ -269,30 +269,35 @@ At that point `build/` is empty.
 There is no `lsst_distrib` checkout to read tags from, yet a tag is needed
 before the first `lsst-build` invocation can run.
 
-Running `lsst-build` once against `main` to populate `build/lsst_distrib` would
-break the cycle, but it costs a full prepare pass and requires knowing the
-deployed tree's layout.
+The cycle is broken with a bootstrap pass.
+If `build/lsst_distrib` is absent, `stack-scan` first runs `lsst-build prepare`
+against the default ref, exactly as it does for a tag but without `--ref`:
 
-The cheaper route is that `stack-scan` already locates `etc/repos.yaml` to pass
-to `lsst-build`, and that file names the source of every product:
-
-```yaml
-lsst_distrib: https://github.com/lsst/lsst_distrib.git
+```
+lsst-build prepare --repos etc/repos.yaml --exclusion-map etc/exclusions.txt \
+    <build-dir> lsst_distrib
 ```
 
-So tag discovery resolves `lsst_distrib` from `etc/repos.yaml` and clones it
-`--bare` into the same cache `repo-history` uses, then reads
-`git tag --list 'w.*' --sort=creatordate`.
-`lsst_distrib` is a metapackage that rarely commits, so the clone is small.
+That populates `build/lsst_distrib` with full history, and the tag list then
+comes from
 
-Values in `repos.yaml` may be a plain URL string or a mapping with a `url` key,
-and the parser accepts both.
+```
+git -C <build-dir>/lsst_distrib tag --list 'w.*' --sort=creatordate
+```
 
-If `build/lsst_distrib` already exists, it is fetched and used directly rather
-than cloned a second time.
+If `build/lsst_distrib` already exists, it is fetched instead of prepared.
+
+Nothing in this project parses `repos.yaml`.
+Resolving a product name to a clone URL is `lsst_build`'s responsibility, and
+duplicating that mapping here would put a second copy of it in a second place.
+The bootstrap pass buys the tag list using the tool that already owns the
+question.
+
+The cost is one extra prepare against a run that already performs several
+hundred, and the clones it creates are reused by every tag that follows.
 
 `--tags-file` overrides the whole list, legacy entries included, when a fixed
-list is needed, and skips tag discovery entirely.
+list is needed, and skips both the bootstrap and tag discovery.
 
 The derived list may contain weeklies that `TAGS_STR` omitted, since that list
 has gaps.
