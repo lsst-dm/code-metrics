@@ -37,6 +37,23 @@ def test_ensure_source_clones_a_url_into_the_cache(synthetic_repo, tmp_path):
     assert git_output(source, "rev-parse", "--is-bare-repository") == "true"
 
 
+def test_ensure_source_refetches_new_commits_into_the_cache(synthetic_repo, tmp_path):
+    cache = tmp_path / "cache"
+    source_url = f"file://{synthetic_repo}"
+    ensure_source(source_url, cache)
+
+    # Advance the upstream branch after the cache already holds a clone,
+    # so reuse has to actually refresh branch refs, not just tags.
+    (synthetic_repo / "d.py").write_text("import re\n")
+    git_output(synthetic_repo, "add", "d.py")
+    git_output(synthetic_repo, "commit", "-q", "-m", "advance main")
+    new_head = git_output(synthetic_repo, "rev-parse", "main")
+
+    cached = ensure_source(source_url, cache)
+
+    assert git_output(cached, "rev-parse", "main") == new_head
+
+
 def test_worktree_is_created_and_removed(synthetic_repo):
     with temporary_worktree(synthetic_repo) as tree:
         assert tree.exists()
