@@ -15,7 +15,7 @@
 - Runtime dependencies are exactly: `click`, `pydantic`, `pyyaml`, `rich`. `pandas` and `matplotlib` go in the `plot` extra only, and must never be imported from a non-plotting module.
 - All models are pydantic `BaseModel` subclasses, not dataclasses.
 - ruff must pass with the repo's existing config: line length 110, docstring lines 79, numpy docstring convention, isort, pyupgrade. Every module, class, and public function needs a docstring.
-- Prefer top-level imports. Function-scoped imports only for the optional `pandas`/`matplotlib` dependencies.
+- Use top-level imports everywhere, including `pandas` and `numpy` inside `plotting.py`. The optional dependency is kept optional by nothing else importing `plotting.py`, not by deferring its imports.
 - One sentence per line in Markdown and in docstring prose.
 - American English spelling.
 - Never normalize language names between backends. Store what the tool reports.
@@ -32,6 +32,7 @@
 - Create: `python/lsst/codemetrics/cli.py`
 - Create: `tests/test_cli_skeleton.py`
 - Delete: `setup.cfg`
+- Delete: `.github/workflows/lint.yaml`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -158,14 +159,19 @@ def main() -> None:
     """Measure the size of a code base over time."""
 ```
 
-- [ ] **Step 5: Delete the obsolete flake8 config**
+- [ ] **Step 5: Delete the obsolete flake8 configuration and workflow**
 
-`setup.cfg` configures flake8, which this project no longer uses; ruff has
-replaced it.
+`setup.cfg` configures flake8 and `.github/workflows/lint.yaml` invokes the
+shared lint workflow that consumes it.
+Both are superseded by ruff, which `.github/workflows/formatting.yaml` and
+the pre-commit hooks already run.
 
 ```bash
-git rm setup.cfg
+git rm setup.cfg .github/workflows/lint.yaml
 ```
+
+Leave `.github/workflows/formatting.yaml` and
+`.github/workflows/rebase_checker.yaml` in place.
 
 - [ ] **Step 6: Install and run the test**
 
@@ -186,7 +192,7 @@ Expected: no errors.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add pyproject.toml python tests
+git add -A pyproject.toml python tests setup.cfg .github/workflows/lint.yaml
 git commit -m "Add installable package scaffolding and CLI skeleton"
 ```
 
@@ -2543,8 +2549,10 @@ Expected: PASS.
 
 Run:
 ```bash
-code-metrics repo-history . --output-dir /tmp/cm-check --branch main --mode all
-head -3 /tmp/cm-check/code-metrics.csv
+check=$(mktemp -d)
+code-metrics repo-history . --output-dir "$check" --branch main --mode all
+head -3 "$check/code-metrics.csv"
+rm -rf "$check"
 ```
 Expected: a progress bar, a summary table, and a CSV whose first line is the
 column header.
@@ -3438,15 +3446,17 @@ def test_pivot_makes_one_column_per_language(repo_csv):
 
 
 def test_load_stack_reads_the_existing_yaml():
-    dates, datasets = load_stack()
+    # Locate data/ relative to this file so the test does not depend on
+    # the working directory pytest was started from.
+    data_dir = Path(__file__).parent.parent / "data"
+    dates, datasets = load_stack(data_dir)
     assert len(dates) > 500
     assert "python_code" in datasets
     assert len(datasets["python_code"]) == len(dates)
     assert list(dates) == sorted(dates)
 ```
 
-The final test reads the repository's real `data/` directory and therefore
-must be run from the repository root.
+Add `from pathlib import Path` to the imports at the top of the file.
 
 - [ ] **Step 2: Run test to verify it fails**
 
