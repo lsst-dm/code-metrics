@@ -184,8 +184,14 @@ class ClocCounter(LineCounter):
         """Write a cloc YAML report directly to a file.
 
         The stack scan preserves cloc's own report format, including its
-        header and SUM blocks, so that files written today match those
-        already in ``data/``.
+        header and SUM blocks, so that files written today have the same
+        shape as those already in ``data/``.
+
+        The per-language and SUM blocks reproduce exactly, which is what
+        every consumer reads.  The header does not: ``elapsed_seconds``,
+        ``files_per_second``, and ``lines_per_second`` are timings that
+        differ on every run, and ``report_file`` records the path this
+        method was given.
 
         Parameters
         ----------
