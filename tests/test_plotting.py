@@ -1,7 +1,9 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
 import pytest
+import yaml
 
 pytest.importorskip("pandas")
 
@@ -85,12 +87,53 @@ def test_pivot_makes_one_column_per_language(repo_csv):
     assert len(wide) == 1
 
 
-def test_load_stack_reads_the_existing_yaml():
-    # Locate data/ relative to this file so the test does not depend on
+def _real_data_dir() -> Path:
+    # Locate data/ relative to this file so the tests do not depend on
     # the working directory pytest was started from.
-    data_dir = Path(__file__).parent.parent / "data"
+    return Path(__file__).parent.parent / "data"
+
+
+def test_load_stack_produces_one_point_per_yaml_file():
+    data_dir = _real_data_dir()
+    file_count = len(list(data_dir.glob("w.*.yaml")))
     dates, datasets = load_stack(data_dir)
-    assert len(dates) > 500
+    assert len(dates) == file_count
     assert "python_code" in datasets
-    assert len(datasets["python_code"]) == len(dates)
-    assert list(dates) == sorted(dates)
+    assert datasets["python_code"][-1] == 593030
+    for series in datasets.values():
+        assert len(series) == len(dates)
+
+
+def test_year_over_52_week_fraction_would_have_collided():
+    # Negative control for test_load_stack_produces_one_point_per_yaml_file:
+    # the previous "year + week / 52" mapping sent week 53 of year Y and
+    # week 1 of year Y + 1 to the same key, so it would have produced
+    # fewer unique fractions than there are files.  This confirms that
+    # test is actually capable of catching that collision.
+    data_dir = _real_data_dir()
+    paths = list(data_dir.glob("w.*.yaml"))
+    old_fractions = {float(p.name.split(".")[1]) + float(p.name.split(".")[2]) / 52.0 for p in paths}
+    assert len(old_fractions) < len(paths)
+
+
+def test_load_stack_dates_are_strictly_increasing():
+    dates, _ = load_stack(_real_data_dir())
+    assert (np.diff(dates) > 0).all()
+
+
+def test_load_stack_resolves_the_week_53_collision(tmp_path):
+    entry = {
+        "Python": {"code": 1, "comment": 1, "blank": 1},
+        "C++": {"code": 1, "comment": 1, "blank": 1},
+        "C/C++ Header": {"code": 1, "comment": 1, "blank": 1},
+        "SUM": {"code": 1, "comment": 1, "blank": 1},
+    }
+    (tmp_path / "w.2016.53.yaml").write_text(yaml.safe_dump(entry))
+    (tmp_path / "w.2017.1.yaml").write_text(yaml.safe_dump(entry))
+
+    dates, _ = load_stack(tmp_path)
+
+    assert len(dates) == 2
+    assert dates[0] == pytest.approx(2016.0 + 52.0 / 53.0)
+    assert dates[1] == pytest.approx(2017.0)
+    assert dates[0] != pytest.approx(dates[1])

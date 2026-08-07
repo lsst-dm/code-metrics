@@ -146,7 +146,9 @@ def load_stack(data_dir: Path = Path("data")) -> tuple[np.ndarray, dict[str, np.
     Returns
     -------
     dates : `numpy.ndarray`
-        Year plus week fraction, ascending.
+        Approximate week position within the year, ascending.  These are
+        not exact dates: each tag is placed at its week number's
+        fraction of the way through the year, not at a calendar date.
     datasets : `dict` [ `str`, `numpy.ndarray` ]
         Series keyed as ``<language>_<measure>``, where language is one of
         ``python``, ``cpp``, or ``all``, and measure is one of ``code``,
@@ -155,9 +157,17 @@ def load_stack(data_dir: Path = Path("data")) -> tuple[np.ndarray, dict[str, np.
     results: dict[float, dict[str, dict[str, int]]] = {}
     for path in data_dir.glob("w.*.yaml"):
         year, week = path.name.split(".")[1:3]
-        # Approximating the date from the week number is close enough for
-        # a plot spanning more than a decade.
-        year_fraction = float(year) + (float(week) / 52.0)
+        # Divide by 53, not the intuitive 52: these tag names are not
+        # true ISO weeks (datetime.fromisocalendar(2016, 53, 1) raises,
+        # since ISO year 2016 has only 52 weeks), and some years in this
+        # data run to week 53.  Dividing by 52 would map week 53 of year
+        # Y to the same fraction as week 1 of year Y + 1, since
+        # Y + 53 / 52 == (Y + 1) + 1 / 52; two distinct tags then
+        # collide on one dict key below and one is silently dropped.
+        # Subtracting 1 and dividing by 53 instead keeps every week
+        # within a year on its own fraction strictly below 1.0, so the
+        # sequence stays strictly increasing across year boundaries too.
+        year_fraction = float(year) + (float(week) - 1.0) / 53.0
         data = yaml.safe_load(path.read_text())
 
         entry: dict[str, dict[str, int]] = {}
