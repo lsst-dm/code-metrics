@@ -3,20 +3,27 @@
 This module is the only one that imports pandas, which is an optional
 dependency installed by the ``plot`` extra.
 
-Counts from different backends are not interchangeable, and the split
-between code and comment is where they disagree most.  cloc and scc treat
-a Python docstring as a comment; tokei treats it as code.  On a file of
-18 lines carrying 12 lines of docstring, cloc reports 3 code and 10
-comment, scc reports 3 and 12, and tokei reports 14 and 1.
+Counts from different backends are not interchangeable, because they
+disagree about whether a Python docstring is code or comment.  Measured
+over ``daf_butler``'s Python source:
 
-Only the total of code, comment, and blank is the same across all three.
-Comparing a ``code`` or ``comment`` series collected by one backend
-against another therefore measures the tools' conventions rather than the
-code base, which is why `select` refuses to mix backends silently.
+=================  =====  =======  =====
+Backend             code  comment  blank
+=================  =====  =======  =====
+cloc               54373    48500  16291
+tokei              55063    52420  11827
+scc                67312    41689  10322
+=================  =====  =======  =====
 
-``cloc --docstring-as-code`` makes cloc agree with tokei's convention,
-but the 543 stack-wide files in ``data/`` were all counted with cloc's
-default, so changing it would break their comparability.
+cloc and tokei agree on ``code`` to about one percent, because
+`~lsst.codemetrics.counters.TokeiCounter` turns on tokei's
+``treat_doc_strings_as_comments`` setting by default.  scc classifies
+much of the same material as code and runs about a quarter higher, so
+its Python figures are not comparable with either.
+
+The totals of all three columns agree to within a tenth of a percent
+everywhere, so the disagreement is purely about which column a line
+lands in.  `select` refuses to mix backends silently for this reason.
 """
 
 import warnings

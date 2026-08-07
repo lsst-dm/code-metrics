@@ -74,3 +74,79 @@ def test_tokei_counts_a_real_tree(tmp_path):
     assert counter.count(tmp_path)["Python"].n_files == 2
     trimmed = counter.count(tmp_path, exclude_dirs=["vendor"])
     assert trimmed["Python"].n_files == 1
+
+
+DOCSTRING_MODULE = '''"""Module docstring.
+
+Spans several lines.
+"""
+
+# A real comment.
+import os
+
+
+def f(x):
+    """Do a thing.
+
+    Parameters
+    ----------
+    x : `int`
+        The thing.
+    """
+    return x
+'''
+
+
+@pytest.mark.skipif(shutil.which("tokei") is None, reason="tokei not installed")
+def test_tokei_counts_docstrings_as_comments_by_default(tmp_path):
+    # cloc and scc both call a docstring a comment. Left to itself tokei
+    # calls it code, which would put this module's 12 docstring lines in a
+    # different column from every other backend.
+    (tmp_path / "mod.py").write_text(DOCSTRING_MODULE)
+    counts = TokeiCounter().count(tmp_path)["Python"]
+    assert counts.code == 3
+    assert counts.comment == 12
+
+
+@pytest.mark.skipif(shutil.which("tokei") is None, reason="tokei not installed")
+def test_tokei_can_restore_its_native_docstring_handling(tmp_path):
+    (tmp_path / "mod.py").write_text(DOCSTRING_MODULE)
+    counts = TokeiCounter(docstrings_as_comments=False).count(tmp_path)["Python"]
+    assert counts.code == 14
+    assert counts.comment == 1
+
+
+@pytest.mark.skipif(shutil.which("tokei") is None, reason="tokei not installed")
+def test_tokei_ignores_a_config_shipped_by_the_scanned_repository(tmp_path):
+    # A repository carrying its own tokei.toml must not silently change
+    # how its history is counted.
+    (tmp_path / "mod.py").write_text(DOCSTRING_MODULE)
+    (tmp_path / "tokei.toml").write_text("treat_doc_strings_as_comments = false\n")
+    counts = TokeiCounter().count(tmp_path)["Python"]
+    assert counts.code == 3
+    assert counts.comment == 12
+
+
+@pytest.mark.skipif(shutil.which("tokei") is None, reason="tokei not installed")
+def test_tokei_still_excludes_directories_with_the_config_in_place(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "vendor").mkdir()
+    (tmp_path / "src" / "a.py").write_text("import os\n")
+    (tmp_path / "vendor" / "b.py").write_text("import sys\n")
+    counter = TokeiCounter()
+    assert counter.count(tmp_path)["Python"].n_files == 2
+    assert counter.count(tmp_path, exclude_dirs=["vendor"])["Python"].n_files == 1
+
+
+@pytest.mark.skipif(
+    shutil.which("cloc") is None or shutil.which("tokei") is None, reason="needs cloc and tokei"
+)
+def test_cloc_and_tokei_agree_on_code_lines(tmp_path):
+    # The point of the default. These two are the comparable pair, and
+    # the stack-wide history in data/ was counted with cloc.  scc is
+    # deliberately not asserted here: it classifies much of the same
+    # material as code and runs about a quarter higher on real numpydoc
+    # source, so a three-way assertion would only hold for toy inputs.
+    (tmp_path / "mod.py").write_text(DOCSTRING_MODULE)
+    assert ClocCounter().count(tmp_path)["Python"].code == 3
+    assert TokeiCounter().count(tmp_path)["Python"].code == 3

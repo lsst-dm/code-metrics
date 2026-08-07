@@ -21,27 +21,37 @@ commit, and `--counter scc` or `--counter tokei` for a different backend.
 Counts from different backends coexist in one file, so they can be
 compared over identical revisions.
 
-### The backends disagree about docstrings
+### Docstrings, and how far the backends agree
 
-cloc and scc count a Python docstring as a comment.
-tokei counts it as code.
-On an 18-line file carrying 12 lines of docstring:
+The backends disagree about whether a Python docstring is code or
+comment, which matters a great deal for numpydoc-heavy code.
+Counted over `daf_butler`'s Python source:
 
 | Backend | code | comment | blank |
 |---|---|---|---|
-| cloc | 3 | 10 | 5 |
-| scc | 3 | 12 | 3 |
-| tokei | 14 | 1 | 3 |
+| cloc | 54,373 | 48,500 | 16,291 |
+| tokei | 55,063 | 52,420 | 11,827 |
+| scc | 67,312 | 41,689 | 10,322 |
 
-Only the total of all three columns is the same.
-A `code` or `comment` series compared across backends therefore measures
-the tools' conventions rather than the code base, so pick one backend and
-stay with it.
-`select()` raises rather than mixing them silently.
+**cloc and tokei agree on `code` to about one percent.**
+They only do so because the tokei backend enables tokei's own
+`treat_doc_strings_as_comments` setting by default; counted natively
+tokei reports roughly twice the code, since it treats every docstring
+line as code.
+`TokeiCounter(docstrings_as_comments=False)` restores that behavior.
 
-`cloc --docstring-as-code` makes cloc follow tokei's convention, but
-every file in `data/` was counted with cloc's default, so the stack-wide
-scan keeps it.
+**scc is not comparable with either**, running about a quarter higher on
+`code`.
+It classifies much of the same material as code however it is
+configured, so do not mix its Python figures with the others.
+
+The totals of all three columns agree everywhere to within a tenth of a
+percent, so this is purely about which column a line lands in.
+`select()` raises rather than mixing backends silently.
+
+`cloc --docstring-as-code` would move cloc the other way, but every file
+in `data/` was counted with cloc's default, so the stack-wide scan keeps
+it.
 
 The backends also name C and C++ headers differently: cloc reports one
 `C/C++ Header`, while scc and tokei split `C Header` from `C++ Header`.
