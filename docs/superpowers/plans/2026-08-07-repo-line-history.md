@@ -3940,8 +3940,22 @@ Expected: PASS.
 
 - [ ] **Step 6: Verify ruff and pre-commit are clean**
 
-Run: `ruff check . && ruff format --check . && pre-commit run --all-files`
+Run: `ruff check . && ruff format --check .`
 Expected: no errors.
+
+Then run pre-commit **scoped to the files this branch changed**, never with
+`--all-files`:
+
+```bash
+pre-commit run --files $(git diff --name-only main...HEAD)
+```
+
+`pre-commit run --all-files` would rewrite 69 of the historical
+`data/*.yaml` files through the `trailing-whitespace` hook.
+Those files are the irreplaceable record this whole plan is careful not to
+disturb, and their whitespace predates the hook.
+Cleaning them up is a separate decision for the repository owner, not a
+side effect of a verification step.
 
 - [ ] **Step 7: Confirm the existing data is still untouched**
 
