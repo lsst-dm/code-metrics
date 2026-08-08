@@ -44,6 +44,13 @@ def test_tags_file_accepts_one_or_two_columns(tmp_path):
         ("w.2020.01", "w.2020.01"),
         ("9.0", "w.2014.31"),
     ]
+    assert [t.legacy for t in targets] == [False, True]
+
+
+def test_tags_file_protects_a_legacy_output_name(tmp_path):
+    path = tmp_path / "tags.txt"
+    path.write_text("custom-tag w.2014.31\n")
+    assert load_tags_file(path)[0].legacy is True
 
 
 def test_build_targets_puts_legacy_first():

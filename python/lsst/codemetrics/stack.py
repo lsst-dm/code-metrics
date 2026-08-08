@@ -107,6 +107,9 @@ def load_tags_file(path: Path) -> list[ScanTarget]:
     targets : `list` [ `ScanTarget` ]
         Targets in file order.
     """
+    legacy_entries = load_legacy_entries()
+    legacy_tags = {entry.tag for entry in legacy_entries}
+    legacy_outputs = {entry.output_name for entry in legacy_entries}
     targets = []
     for line in path.read_text().splitlines():
         stripped = _strip_comment(line)
@@ -115,7 +118,8 @@ def load_tags_file(path: Path) -> list[ScanTarget]:
         parts = stripped.split()
         tag = parts[0]
         output_name = parts[1] if len(parts) > 1 else tag
-        targets.append(ScanTarget(tag=tag, output_name=output_name, legacy=False))
+        is_legacy = tag in legacy_tags or output_name in legacy_outputs
+        targets.append(ScanTarget(tag=tag, output_name=output_name, legacy=is_legacy))
     return targets
 
 
