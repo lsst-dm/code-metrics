@@ -1,3 +1,5 @@
+from importlib.metadata import version
+
 from click.testing import CliRunner
 from lsst.codemetrics.cli import main
 
@@ -11,4 +13,4 @@ def test_main_group_runs():
 def test_main_group_reports_package_version():
     result = CliRunner().invoke(main, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    assert version("lsst-code-metrics") in result.output
