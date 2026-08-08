@@ -242,6 +242,19 @@ def top_series(
 def pivot(frame: pd.DataFrame, value: str = "code") -> pd.DataFrame:
     """Reshape counts into one column per language.
 
+    Several revisions can share a committer timestamp to the second,
+    which is what rewriting history produces: a rebase applies a run of
+    commits in the same instant.  Each of those revisions is a complete
+    measurement of the whole repository, so combining them arithmetically
+    is meaningless -- adding them together would report a repository
+    several times its real size at that moment, as a spike that looks
+    like a real event.
+
+    The last revision at a shared instant is used, ordered by commit id
+    so the choice does not depend on row order.  It is the state the
+    branch was left in once every commit bearing that timestamp had been
+    applied.
+
     Parameters
     ----------
     frame : `pandas.DataFrame`
@@ -252,9 +265,13 @@ def pivot(frame: pd.DataFrame, value: str = "code") -> pd.DataFrame:
     Returns
     -------
     frame : `pandas.DataFrame`
-        Wide counts indexed by date.
+        Wide counts indexed by date, one row per distinct timestamp.
     """
-    return frame.pivot_table(index="date", columns="language", values=value, aggfunc="sum").sort_index()
+    if frame.empty:
+        return frame
+    ordered = frame.sort_values(["date", "commit"])
+    latest = ordered.drop_duplicates(subset=["date", "language"], keep="last")
+    return latest.pivot(index="date", columns="language", values=value).sort_index()
 
 
 def load_stack(data_dir: Path = Path("data")) -> tuple[np.ndarray, dict[str, np.ndarray]]:

@@ -307,3 +307,65 @@ def test_top_series_rejects_a_non_positive_n():
 
 def test_top_series_on_an_empty_frame_is_empty():
     assert top_series(pd.DataFrame(), n=5) == []
+
+
+def same_timestamp_frame():
+    """Three revisions sharing one instant, as a history rewrite makes.
+
+    Each revision is a complete measurement of the repository, so the
+    series must show one of them, never their total.
+    """
+    when = datetime(2012, 10, 31, 16, 31, 46, tzinfo=UTC)
+    rows = [
+        LineRow(
+            commit=commit,
+            date=when,
+            counter="cloc",
+            counter_version="2.10",
+            language="C++",
+            n_files=1,
+            blank=0,
+            comment=0,
+            code=code,
+        )
+        for commit, code in (("aaa", 49733), ("bbb", 49848), ("ccc", 49917))
+    ]
+    rows.append(
+        LineRow(
+            commit="ddd",
+            date=datetime(2012, 11, 1, tzinfo=UTC),
+            counter="cloc",
+            counter_version="2.10",
+            language="C++",
+            n_files=1,
+            blank=0,
+            comment=0,
+            code=50000,
+        )
+    )
+    frame = pd.DataFrame([r.model_dump() for r in rows])
+    frame["lines"] = frame["code"] + frame["comment"]
+    return frame
+
+
+def test_pivot_does_not_sum_revisions_sharing_a_timestamp():
+    wide = pivot(same_timestamp_frame(), value="code")
+    # Summing would give 149498, roughly three times the real size.
+    assert wide["C++"].max() < 60000
+
+
+def test_pivot_keeps_one_point_per_timestamp():
+    wide = pivot(same_timestamp_frame(), value="code")
+    assert len(wide) == 2
+    assert wide.index.is_unique
+
+
+def test_pivot_picks_the_last_revision_at_a_shared_timestamp():
+    # Sorted by commit, "ccc" is last at that instant.
+    wide = pivot(same_timestamp_frame(), value="code")
+    assert wide["C++"].iloc[0] == 49917
+
+
+def test_pivot_is_deterministic_under_row_order():
+    frame = same_timestamp_frame()
+    assert pivot(frame, value="code").equals(pivot(frame.iloc[::-1].copy(), value="code"))
