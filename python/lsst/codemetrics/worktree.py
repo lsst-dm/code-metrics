@@ -1,5 +1,6 @@
 """Obtaining a repository and checking revisions out of it safely."""
 
+import hashlib
 import re
 import shutil
 import tempfile
@@ -76,6 +77,8 @@ def ensure_source(target: str, cache_dir: Path) -> Path:
     leave branch refs frozen at whatever the first clone saw.
     ``--mirror`` implies ``--bare`` and additionally sets up a refspec
     that maps every ref, so a later fetch keeps branches current too.
+    The cache name includes a digest of the full URL so repositories and
+    forks that share a basename cannot reuse one another's origin.
 
     Parameters
     ----------
@@ -93,7 +96,8 @@ def ensure_source(target: str, cache_dir: Path) -> Path:
         return Path(target).expanduser().resolve()
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cached = cache_dir / f"{repo_name(target)}.git"
+    identity = hashlib.sha256(target.encode()).hexdigest()[:12]
+    cached = cache_dir / f"{repo_name(target)}-{identity}.git"
     if cached.exists():
         git_output(cached, "fetch", "--prune", "origin")
     else:

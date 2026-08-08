@@ -75,6 +75,29 @@ def test_ensure_source_refetches_new_commits_into_the_cache(synthetic_repo, tmp_
     assert git_output(cached, "rev-parse", "main") == new_head
 
 
+def test_ensure_source_separates_remotes_with_the_same_name(synthetic_repo, tmp_path):
+    other_parent = tmp_path / "other"
+    other_parent.mkdir()
+    git_output(other_parent, "clone", "-q", str(synthetic_repo), "synthetic")
+    other_repo = other_parent / "synthetic"
+    git_output(other_repo, "config", "user.email", "test@example.com")
+    git_output(other_repo, "config", "user.name", "Test")
+    (other_repo / "unique.py").write_text("value = 1\n")
+    git_output(other_repo, "add", "unique.py")
+    git_output(other_repo, "commit", "-q", "-m", "make repositories distinct")
+
+    cache = tmp_path / "cache"
+    first_url = f"file://{synthetic_repo}"
+    second_url = f"file://{other_repo}"
+    first = ensure_source(first_url, cache)
+    second = ensure_source(second_url, cache)
+
+    assert first != second
+    assert git_output(first, "remote", "get-url", "origin") == first_url
+    assert git_output(second, "remote", "get-url", "origin") == second_url
+    assert git_output(first, "rev-parse", "main") != git_output(second, "rev-parse", "main")
+
+
 def test_worktree_is_created_and_removed(synthetic_repo):
     with temporary_worktree(synthetic_repo) as tree:
         assert tree.exists()
