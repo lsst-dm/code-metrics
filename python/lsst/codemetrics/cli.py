@@ -35,7 +35,7 @@ the remainder (`int`).
 
 
 @click.group()
-@click.version_option()
+@click.version_option(package_name="lsst-code-metrics")
 def main() -> None:
     """Measure the size of a code base over time."""
     logging.basicConfig(
