@@ -26,6 +26,18 @@ def _git(
     return result.stdout.strip()
 
 
+@pytest.fixture(autouse=True)
+def isolated_data_location(monkeypatch, tmp_path):
+    """Keep a developer's own data root out of the suite.
+
+    Resolution falls back to the environment and to a user config file,
+    so without this a machine with CODE_METRICS_DATA_DIR set would run
+    different tests from one without it.
+    """
+    monkeypatch.delenv("CODE_METRICS_DATA_DIR", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-isolated"))
+
+
 @pytest.fixture
 def synthetic_repo(tmp_path: Path) -> Path:
     """A repository with a merge, a rebase-like commit, and mixed tags.

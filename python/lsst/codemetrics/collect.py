@@ -17,6 +17,7 @@ from rich.progress import (
 )
 
 from .counters import CounterError, LineCounter
+from .location import repo_dir
 from .revisions import GitError, Sample, default_branch, sample_revisions
 from .storage import (
     LineRow,
@@ -92,7 +93,7 @@ def collect(
     target: str,
     *,
     name: str | None = None,
-    output_dir: Path = Path("data/repos"),
+    data_dir: Path | str | None = None,
     mode: str = "first-parent",
     branch: str | None = None,
     tag_pattern: str = "w.*",
@@ -123,8 +124,9 @@ def collect(
         Repository path or URL.
     name : `str`, optional
         Output base name.  Defaults to the repository's basename.
-    output_dir : `~pathlib.Path`, optional
-        Directory to write the CSV and sidecar into.
+    data_dir : `~pathlib.Path` or `str`, optional
+        Data root to write beneath.  Resolved by
+        `~lsst.codemetrics.location.data_root` when not given.
     mode : `str`, optional
         Sampling mode.
     branch : `str`, optional
@@ -162,8 +164,9 @@ def collect(
         Raised if no revisions were selected.
     """
     resolved_name = name or repo_name(target)
-    csv_path = output_dir / f"{resolved_name}.csv"
-    meta_path = output_dir / f"{resolved_name}.meta.yaml"
+    destination = repo_dir(data_dir)
+    csv_path = destination.path / f"{resolved_name}.csv"
+    meta_path = destination.path / f"{resolved_name}.meta.yaml"
 
     source = ensure_source(target, cache_dir)
     resolved_branch = branch or (default_branch(source) if mode != "tags" else "")

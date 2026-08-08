@@ -12,6 +12,7 @@ from rich.table import Table
 
 from .collect import CollectResult, collect
 from .counters import COUNTERS, ClocCounter, get_counter
+from .location import repo_dir
 from .revisions import MODES, GitError
 from .stack import (
     bootstrap_distrib,
@@ -82,11 +83,13 @@ def summary_table(result: CollectResult, name: str) -> Table:
 @click.argument("repo")
 @click.option("--name", default=None, help="Output base name. Defaults to the repository basename.")
 @click.option(
-    "--output-dir",
+    "--data-dir",
     type=click.Path(file_okay=False, path_type=Path),
-    default=Path("data/repos"),
-    show_default=True,
-    help="Directory to write the CSV and sidecar into.",
+    default=None,
+    help=(
+        "Data root to write beneath, as <root>/repos/<name>.csv. Falls back to "
+        "$CODE_METRICS_DATA_DIR, then the config file, then the current directory."
+    ),
 )
 @click.option(
     "--mode",
@@ -120,7 +123,7 @@ def summary_table(result: CollectResult, name: str) -> Table:
 def repo_history(
     repo: str,
     name: str | None,
-    output_dir: Path,
+    data_dir: Path | None,
     mode: str,
     branch: str | None,
     tag_pattern: str,
@@ -140,7 +143,7 @@ def repo_history(
         result = collect(
             repo,
             name=name,
-            output_dir=output_dir,
+            data_dir=data_dir,
             mode=mode,
             branch=branch,
             tag_pattern=tag_pattern,
@@ -154,7 +157,12 @@ def repo_history(
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
-    Console().print(summary_table(result, name or repo))
+    console = Console()
+    # Say where the counts went. The command that writes and the notebook
+    # that reads resolve this the same way, and printing it is what makes
+    # a misconfigured root obvious rather than looking like missing data.
+    console.print(f"Wrote counts to {repo_dir(data_dir).describe()}")
+    console.print(summary_table(result, name or repo))
 
 
 def _format_tag_list(tags: list[str]) -> str:

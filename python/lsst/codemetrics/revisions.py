@@ -1,7 +1,7 @@
 """Selection of the revisions at which a repository is measured."""
 
 import subprocess
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -150,6 +150,29 @@ def _tag_samples(repo: Path, pattern: str) -> list[Sample]:
     return samples
 
 
+def _as_aware(when: datetime | None) -> datetime | None:
+    """Give a bound a time zone if it lacks one.
+
+    Committer dates always carry an offset, so comparing them against a
+    naive bound raises.  Command line dates arrive naive, and a user
+    writing ``--since 2020-01-01`` means that date, not a date in an
+    unspecified zone, so UTC is assumed.
+
+    Parameters
+    ----------
+    when : `~datetime.datetime` or `None`
+        Bound to normalize.
+
+    Returns
+    -------
+    when : `~datetime.datetime` or `None`
+        The bound, guaranteed to carry a time zone.
+    """
+    if when is None or when.tzinfo is not None:
+        return when
+    return when.replace(tzinfo=UTC)
+
+
 def sample_revisions(
     repo: Path,
     mode: str,
@@ -196,9 +219,10 @@ def sample_revisions(
         rev_args = ["--first-parent", target] if mode == "first-parent" else [target]
         samples = _commit_samples(repo, rev_args)
 
-    if since is not None:
-        samples = [s for s in samples if s.date >= since]
-    if until is not None:
-        samples = [s for s in samples if s.date <= until]
+    lower, upper = _as_aware(since), _as_aware(until)
+    if lower is not None:
+        samples = [s for s in samples if s.date >= lower]
+    if upper is not None:
+        samples = [s for s in samples if s.date <= upper]
 
     return sorted(samples, key=lambda s: (s.date, s.commit))

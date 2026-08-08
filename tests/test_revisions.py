@@ -78,3 +78,18 @@ def test_unknown_mode_is_rejected(synthetic_repo):
 def test_git_output_raises_on_failure(synthetic_repo):
     with pytest.raises(GitError):
         git_output(synthetic_repo, "no-such-subcommand")
+
+
+def test_naive_bounds_are_treated_as_utc(synthetic_repo):
+    # click.DateTime() hands over naive datetimes, while committer dates
+    # are always aware, so comparing them directly raises TypeError.
+    naive = datetime(2020, 2, 1)
+    assert naive.tzinfo is None
+    samples = sample_revisions(synthetic_repo, "all", branch="main", since=naive)
+    assert len(samples) == 3
+
+
+def test_naive_and_aware_bounds_select_the_same_revisions(synthetic_repo):
+    naive = sample_revisions(synthetic_repo, "all", branch="main", until=datetime(2020, 2, 28))
+    aware = sample_revisions(synthetic_repo, "all", branch="main", until=datetime(2020, 2, 28, tzinfo=UTC))
+    assert [s.commit for s in naive] == [s.commit for s in aware]

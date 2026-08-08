@@ -13,8 +13,43 @@ This provides the `code-metrics` command.
     code-metrics repo-history https://github.com/lsst/daf_butler
 
 Samples the first-parent chain of the default branch, counts each revision
-with `cloc`, and writes `data/repos/daf_butler.csv`.
+with `cloc`, and writes `<data root>/repos/daf_butler.csv`.
 Re-running counts only revisions that are not already recorded.
+
+### Where the counts go
+
+This command works on any git repository, so its results do not belong
+beside the LSST specific stack data in this repository.
+They live in a data repository of your own, whose top directory is the
+*data root*.
+Per-repository counts sit in its `repos` directory, leaving room beside
+them for other kinds of data later.
+
+The root is resolved in this order:
+
+1. `--data-dir` on the command line, or `data_dir=` in the notebook
+2. the `CODE_METRICS_DATA_DIR` environment variable
+3. `data_dir` in `~/.config/code-metrics/config.toml`, honouring
+   `XDG_CONFIG_HOME`
+4. the current directory, so working inside the data repository needs no
+   configuration at all
+
+Set it up once:
+
+    git clone <your-data-repo> ~/work/code-metrics-data
+    export CODE_METRICS_DATA_DIR=~/work/code-metrics-data
+
+or write `~/.config/code-metrics/config.toml`:
+
+```toml
+data_dir = "~/work/code-metrics-data"
+```
+
+Collection prints the root it resolved and which rule chose it, and
+`load_repo` says the same in its error when a file is missing.
+The command that writes and the notebook that reads resolve the root by
+the same rule, so they cannot end up pointing at different directories
+without saying so.
 
 Use `--mode tags` to sample weekly tags instead, `--mode all` for every
 commit, and `--counter scc` or `--counter tokei` for a different backend.

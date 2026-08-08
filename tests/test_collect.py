@@ -43,7 +43,7 @@ def test_collects_every_sample(synthetic_repo, tmp_path):
     result = collect(
         str(synthetic_repo),
         name="synthetic",
-        output_dir=tmp_path,
+        data_dir=tmp_path,
         mode="first-parent",
         branch="main",
         counter=StubCounter(),
@@ -52,7 +52,7 @@ def test_collects_every_sample(synthetic_repo, tmp_path):
     assert result.added == 3
     assert result.total == 3
     assert result.languages == ["Python"]
-    rows = read_rows(tmp_path / "synthetic.csv")
+    rows = read_rows(tmp_path / "repos" / "synthetic.csv")
     assert len(rows) == 3
     assert {r.counter for r in rows} == {"stub"}
 
@@ -60,7 +60,7 @@ def test_collects_every_sample(synthetic_repo, tmp_path):
 def test_second_run_adds_nothing(synthetic_repo, tmp_path):
     kwargs = {
         "name": "synthetic",
-        "output_dir": tmp_path,
+        "data_dir": tmp_path,
         "mode": "first-parent",
         "branch": "main",
         "progress": False,
@@ -75,7 +75,7 @@ def test_second_run_adds_nothing(synthetic_repo, tmp_path):
 def test_switching_counter_recounts_and_keeps_both(synthetic_repo, tmp_path):
     kwargs = {
         "name": "synthetic",
-        "output_dir": tmp_path,
+        "data_dir": tmp_path,
         "mode": "first-parent",
         "branch": "main",
         "progress": False,
@@ -86,7 +86,7 @@ def test_switching_counter_recounts_and_keeps_both(synthetic_repo, tmp_path):
         name = "other"
 
     collect(str(synthetic_repo), counter=OtherCounter(), **kwargs)
-    rows = read_rows(tmp_path / "synthetic.csv")
+    rows = read_rows(tmp_path / "repos" / "synthetic.csv")
     assert {r.counter for r in rows} == {"stub", "other"}
     assert len(rows) == 6
 
@@ -95,7 +95,7 @@ def test_a_failing_sample_is_skipped(synthetic_repo, tmp_path):
     result = collect(
         str(synthetic_repo),
         name="synthetic",
-        output_dir=tmp_path,
+        data_dir=tmp_path,
         mode="first-parent",
         branch="main",
         counter=StubCounter(fail_on={2}),
@@ -108,7 +108,7 @@ def test_a_failing_sample_is_skipped(synthetic_repo, tmp_path):
 def test_strict_aborts_on_failure(synthetic_repo, tmp_path):
     kwargs = {
         "name": "synthetic",
-        "output_dir": tmp_path,
+        "data_dir": tmp_path,
         "mode": "first-parent",
         "branch": "main",
         "progress": False,
@@ -118,7 +118,7 @@ def test_strict_aborts_on_failure(synthetic_repo, tmp_path):
 
     # The sample counted before the failure must have been flushed to
     # disk, not lost along with the aborted run.
-    rows = read_rows(tmp_path / "synthetic.csv")
+    rows = read_rows(tmp_path / "repos" / "synthetic.csv")
     assert len(rows) == 1
 
     # A later run must resume from that persisted state rather than
@@ -133,13 +133,13 @@ def test_an_uncaught_exception_still_persists_collected_rows(synthetic_repo, tmp
         collect(
             str(synthetic_repo),
             name="synthetic",
-            output_dir=tmp_path,
+            data_dir=tmp_path,
             mode="first-parent",
             branch="main",
             counter=StubCounter(raise_on={2: RuntimeError("boom")}),
             progress=False,
         )
-    rows = read_rows(tmp_path / "synthetic.csv")
+    rows = read_rows(tmp_path / "repos" / "synthetic.csv")
     assert len(rows) == 1
 
 
@@ -148,13 +148,13 @@ def test_keyboard_interrupt_still_persists_collected_rows(synthetic_repo, tmp_pa
         collect(
             str(synthetic_repo),
             name="synthetic",
-            output_dir=tmp_path,
+            data_dir=tmp_path,
             mode="first-parent",
             branch="main",
             counter=StubCounter(raise_on={2: KeyboardInterrupt()}),
             progress=False,
         )
-    rows = read_rows(tmp_path / "synthetic.csv")
+    rows = read_rows(tmp_path / "repos" / "synthetic.csv")
     assert len(rows) == 1
 
 
@@ -163,7 +163,7 @@ def test_empty_sample_list_raises(synthetic_repo, tmp_path):
         collect(
             str(synthetic_repo),
             name="synthetic",
-            output_dir=tmp_path,
+            data_dir=tmp_path,
             mode="first-parent",
             branch="main",
             counter=StubCounter(),
@@ -176,32 +176,32 @@ def test_sidecar_metadata_is_written(synthetic_repo, tmp_path):
     collect(
         str(synthetic_repo),
         name="synthetic",
-        output_dir=tmp_path,
+        data_dir=tmp_path,
         mode="first-parent",
         branch="main",
         counter=StubCounter(),
         exclude_dirs=["vendor"],
         progress=False,
     )
-    assert (tmp_path / "synthetic.meta.yaml").exists()
+    assert (tmp_path / "repos" / "synthetic.meta.yaml").exists()
 
 
 def test_name_defaults_to_the_repository_basename(synthetic_repo, tmp_path):
     collect(
         str(synthetic_repo),
-        output_dir=tmp_path,
+        data_dir=tmp_path,
         mode="first-parent",
         branch="main",
         counter=StubCounter(),
         progress=False,
     )
-    assert (tmp_path / "synthetic.csv").exists()
+    assert (tmp_path / "repos" / "synthetic.csv").exists()
 
 
 def test_force_recounts_everything(synthetic_repo, tmp_path):
     kwargs = {
         "name": "synthetic",
-        "output_dir": tmp_path,
+        "data_dir": tmp_path,
         "mode": "first-parent",
         "branch": "main",
         "progress": False,
@@ -217,7 +217,7 @@ def test_a_sample_with_no_languages_is_counted_as_empty(synthetic_repo, tmp_path
     result = collect(
         str(synthetic_repo),
         name="synthetic",
-        output_dir=tmp_path,
+        data_dir=tmp_path,
         mode="first-parent",
         branch="main",
         counter=StubCounter(empty_on={2}),
@@ -228,7 +228,7 @@ def test_a_sample_with_no_languages_is_counted_as_empty(synthetic_repo, tmp_path
     assert result.failed == 0
     assert result.skipped == 0
     assert result.added + result.skipped + result.failed + result.empty == 3
-    rows = read_rows(tmp_path / "synthetic.csv")
+    rows = read_rows(tmp_path / "repos" / "synthetic.csv")
     assert len(rows) == 2
     assert len({r.commit for r in rows}) == 2
 
@@ -236,7 +236,7 @@ def test_a_sample_with_no_languages_is_counted_as_empty(synthetic_repo, tmp_path
 def test_an_empty_sample_is_re_examined_on_the_next_run(synthetic_repo, tmp_path):
     kwargs = {
         "name": "synthetic",
-        "output_dir": tmp_path,
+        "data_dir": tmp_path,
         "mode": "first-parent",
         "branch": "main",
         "progress": False,

@@ -49,7 +49,7 @@ def repo_csv(tmp_path):
             code=3,
         )
     )
-    write_rows(tmp_path / "demo.csv", rows)
+    write_rows(tmp_path / "repos" / "demo.csv", rows)
     return tmp_path
 
 

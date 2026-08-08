@@ -34,6 +34,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from .location import repo_dir
 from .storage import read_rows
 
 CPP_HEADER_ALIASES: dict[str, str] = {
@@ -54,15 +55,16 @@ that as a naming difference would misrepresent what they measured.
 """
 
 
-def load_repo(name: str, output_dir: Path = Path("data/repos")) -> pd.DataFrame:
+def load_repo(name: str, data_dir: Path | str | None = None) -> pd.DataFrame:
     """Load one repository's stored counts.
 
     Parameters
     ----------
     name : `str`
         Repository base name.
-    output_dir : `~pathlib.Path`, optional
-        Directory holding the CSV files.
+    data_dir : `~pathlib.Path` or `str`, optional
+        Data root to read beneath.  Resolved by
+        `~lsst.codemetrics.location.data_root` when not given.
 
     Returns
     -------
@@ -74,10 +76,12 @@ def load_repo(name: str, output_dir: Path = Path("data/repos")) -> pd.DataFrame:
     FileNotFoundError
         Raised if no CSV exists for that name.
     """
-    path = output_dir / f"{name}.csv"
+    source = repo_dir(data_dir)
+    path = source.path / f"{name}.csv"
     if not path.exists():
         raise FileNotFoundError(
-            f"No counts found at {path}. Collect them with: code-metrics repo-history <repo>"
+            f"No counts for {name!r} at {path}. Data root was {source.describe()}. "
+            "Collect them with: code-metrics repo-history <repo>"
         )
     rows = read_rows(path)
     frame = pd.DataFrame([row.model_dump() for row in rows])

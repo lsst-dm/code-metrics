@@ -20,7 +20,7 @@ def test_repo_history_runs_against_a_local_repo(synthetic_repo, tmp_path):
         [
             "repo-history",
             str(synthetic_repo),
-            "--output-dir",
+            "--data-dir",
             str(tmp_path),
             "--branch",
             "main",
@@ -29,7 +29,7 @@ def test_repo_history_runs_against_a_local_repo(synthetic_repo, tmp_path):
         ],
     )
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "synthetic.csv").exists()
+    assert (tmp_path / "repos" / "synthetic.csv").exists()
     assert "synthetic" in result.output
 
 
@@ -41,10 +41,10 @@ def test_repo_history_dot_argument_names_output_after_the_directory(synthetic_re
     monkeypatch.chdir(synthetic_repo)
     result = CliRunner().invoke(
         main,
-        ["repo-history", ".", "--output-dir", str(tmp_path), "--branch", "main"],
+        ["repo-history", ".", "--data-dir", str(tmp_path), "--branch", "main"],
     )
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "synthetic.csv").exists()
+    assert (tmp_path / "repos" / "synthetic.csv").exists()
     assert not (tmp_path / "..csv").exists()
 
 
@@ -59,7 +59,7 @@ def test_empty_range_exits_non_zero(synthetic_repo, tmp_path):
         [
             "repo-history",
             str(synthetic_repo),
-            "--output-dir",
+            "--data-dir",
             str(tmp_path),
             "--branch",
             "main",
@@ -68,6 +68,10 @@ def test_empty_range_exits_non_zero(synthetic_repo, tmp_path):
         ],
     )
     assert result.exit_code != 0
+    # A traceback also exits non-zero, so check this is the clean
+    # message and not a crash comparing naive to aware datetimes.
+    assert "No revisions selected" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_summary_table_shows_empty_revisions():
