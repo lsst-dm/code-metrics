@@ -12,6 +12,7 @@ from run to run.
 import logging
 import os
 import subprocess
+import tempfile
 from importlib import resources
 from pathlib import Path
 
@@ -324,11 +325,15 @@ def scan_target(
         raise RuntimeError(f"No products found with ref {target.tag}.")
     _LOG.info("Counting %d products at %s.", len(products), target.tag)
     output_dir.mkdir(parents=True, exist_ok=True)
-    counter.write_report(
-        [build_dir / product for product in products],
-        output_dir / f"{target.output_name}.yaml",
-        include_langs=INCLUDE_LANGS,
-    )
+    destination = output_dir / f"{target.output_name}.yaml"
+    with tempfile.TemporaryDirectory(dir=output_dir, prefix=f".{destination.name}.") as scratch:
+        temporary = Path(scratch) / destination.name
+        counter.write_report(
+            [build_dir / product for product in products],
+            temporary,
+            include_langs=INCLUDE_LANGS,
+        )
+        os.replace(temporary, destination)
 
 
 def should_scan(target: ScanTarget, output_dir: Path, force: bool, force_legacy: bool) -> bool:

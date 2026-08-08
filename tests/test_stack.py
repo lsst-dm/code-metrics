@@ -1,11 +1,15 @@
+import pytest
+from lsst.codemetrics import stack
 from lsst.codemetrics.stack import (
     EXCLUDED_PRODUCTS,
     INCLUDE_LANGS,
+    ScanTarget,
     build_targets,
     discover_weekly_tags,
     load_legacy_entries,
     load_tags_file,
     manifest_products,
+    scan_target,
 )
 
 
@@ -93,3 +97,50 @@ def test_manifest_products_filters_upstream_dirs(tmp_path):
 
 def test_metadetect_is_excluded():
     assert "metadetect" in EXCLUDED_PRODUCTS
+
+
+def test_scan_target_replaces_report_only_after_success(tmp_path, monkeypatch):
+    monkeypatch.setattr(stack, "_prepare", lambda *args: None)
+    monkeypatch.setattr(stack, "manifest_products", lambda build_dir: ["afw"])
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    destination = output_dir / "w.2020.01.yaml"
+    destination.write_text("complete\n")
+
+    class FailingCounter:
+        def write_report(self, paths, output_file, include_langs=None):
+            output_file.write_text("partial\n")
+            raise RuntimeError("counting failed")
+
+    with pytest.raises(RuntimeError, match="counting failed"):
+        scan_target(
+            ScanTarget(tag="w.2020.01", output_name="w.2020.01", legacy=False),
+            lsstsw_dir=tmp_path,
+            build_dir=tmp_path / "build",
+            lsst_build_exe=tmp_path / "lsst-build",
+            output_dir=output_dir,
+            counter=FailingCounter(),
+        )
+
+    assert destination.read_text() == "complete\n"
+
+
+def test_scan_target_atomically_installs_completed_report(tmp_path, monkeypatch):
+    monkeypatch.setattr(stack, "_prepare", lambda *args: None)
+    monkeypatch.setattr(stack, "manifest_products", lambda build_dir: ["afw"])
+
+    class SuccessfulCounter:
+        def write_report(self, paths, output_file, include_langs=None):
+            output_file.write_text("complete\n")
+
+    output_dir = tmp_path / "output"
+    scan_target(
+        ScanTarget(tag="w.2020.01", output_name="w.2020.01", legacy=False),
+        lsstsw_dir=tmp_path,
+        build_dir=tmp_path / "build",
+        lsst_build_exe=tmp_path / "lsst-build",
+        output_dir=output_dir,
+        counter=SuccessfulCounter(),
+    )
+
+    assert (output_dir / "w.2020.01.yaml").read_text() == "complete\n"
