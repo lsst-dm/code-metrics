@@ -11,6 +11,7 @@ from lsst.codemetrics.storage import (
     RepoMeta,
     collected_keys,
     merge_rows,
+    read_meta,
     read_rows,
     write_meta,
     write_rows,
@@ -196,6 +197,17 @@ def test_write_meta_is_readable_yaml(tmp_path):
     loaded = yaml.safe_load(path.read_text())
     assert loaded["name"] == "afw"
     assert loaded["exclude_dirs"] == ["vendor"]
+
+
+def test_read_meta_round_trips_written_metadata(tmp_path):
+    path = tmp_path / "repo.meta.yaml"
+    meta = make_meta()
+    write_meta(path, meta)
+    assert read_meta(path) == meta
+
+
+def test_reading_missing_metadata_returns_none(tmp_path):
+    assert read_meta(tmp_path / "absent.meta.yaml") is None
 
 
 def test_write_meta_creates_a_file_with_the_default_mode(tmp_path):

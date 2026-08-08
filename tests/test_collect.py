@@ -186,6 +186,50 @@ def test_sidecar_metadata_is_written(synthetic_repo, tmp_path):
     assert (tmp_path / "repos" / "synthetic.meta.yaml").exists()
 
 
+def test_changed_collection_settings_are_rejected(synthetic_repo, tmp_path):
+    kwargs = {
+        "name": "synthetic",
+        "data_dir": tmp_path,
+        "mode": "first-parent",
+        "branch": "main",
+        "progress": False,
+    }
+    collect(str(synthetic_repo), counter=StubCounter(), **kwargs)
+    csv_path = tmp_path / "repos" / "synthetic.csv"
+    meta_path = tmp_path / "repos" / "synthetic.meta.yaml"
+    original_csv = csv_path.read_text()
+    original_meta = meta_path.read_text()
+    counter = StubCounter()
+
+    with pytest.raises(ValueError, match="differ from its metadata"):
+        collect(
+            str(synthetic_repo),
+            counter=counter,
+            exclude_dirs=["vendor"],
+            force=True,
+            **kwargs,
+        )
+
+    assert counter.calls == 0
+    assert csv_path.read_text() == original_csv
+    assert meta_path.read_text() == original_meta
+
+
+def test_existing_counts_without_metadata_are_rejected(synthetic_repo, tmp_path):
+    kwargs = {
+        "name": "synthetic",
+        "data_dir": tmp_path,
+        "mode": "first-parent",
+        "branch": "main",
+        "progress": False,
+    }
+    collect(str(synthetic_repo), counter=StubCounter(), **kwargs)
+    (tmp_path / "repos" / "synthetic.meta.yaml").unlink()
+
+    with pytest.raises(ValueError, match="no collection metadata"):
+        collect(str(synthetic_repo), counter=StubCounter(), **kwargs)
+
+
 def test_name_defaults_to_the_repository_basename(synthetic_repo, tmp_path):
     collect(
         str(synthetic_repo),

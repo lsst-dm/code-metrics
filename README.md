@@ -56,6 +56,11 @@ commit, and `--counter scc` or `--counter tokei` for a different backend.
 Counts from different backends coexist in one file, so they can be
 compared over identical revisions.
 
+An output name has one repository and one set of sampling and exclusion
+settings. A later run with incompatible settings stops before writing;
+choose a different `--name` rather than combining unlike datasets.
+`--force` recounts the same dataset with the same settings.
+
 ### Docstrings, and how far the backends agree
 
 The backends disagree about whether a Python docstring is code or

@@ -237,3 +237,21 @@ def write_meta(path: Path, meta: RepoMeta) -> None:
     """
     with _atomic_create(path) as fd:
         fd.write(yaml.safe_dump(meta.model_dump(), sort_keys=False))
+
+
+def read_meta(path: Path) -> RepoMeta | None:
+    """Read a repository collection description.
+
+    Parameters
+    ----------
+    path : `~pathlib.Path`
+        YAML file to read.
+
+    Returns
+    -------
+    meta : `RepoMeta` or `None`
+        Parsed metadata, or `None` if the file does not exist.
+    """
+    if not path.exists():
+        return None
+    return RepoMeta(**yaml.safe_load(path.read_text()))

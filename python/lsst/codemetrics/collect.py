@@ -24,6 +24,7 @@ from .storage import (
     RepoMeta,
     collected_keys,
     merge_rows,
+    read_meta,
     read_rows,
     write_meta,
     write_rows,
@@ -181,7 +182,30 @@ def collect(
     if not samples:
         raise ValueError(f"No revisions selected for {target} in mode {mode!r}.")
 
+    requested_meta = RepoMeta(
+        name=resolved_name,
+        url=target,
+        mode=mode,
+        branch=resolved_branch,
+        tag_pattern=tag_pattern,
+        exclude_dirs=list(exclude_dirs),
+    )
     existing = read_rows(csv_path)
+    recorded_meta = read_meta(meta_path)
+    if existing and recorded_meta is None:
+        raise ValueError(
+            f"Existing counts at {csv_path} have no collection metadata. "
+            "Choose a different --name rather than mixing datasets."
+        )
+    if recorded_meta is not None and recorded_meta != requested_meta:
+        raise ValueError(
+            f"Collection settings for {csv_path} differ from its metadata. "
+            "Choose a different --name rather than mixing datasets."
+        )
+
+    # Write this before counting so a partial CSV left by a strict failure
+    # or interruption still has the metadata needed for a later resume.
+    write_meta(meta_path, requested_meta)
     done = set() if force else collected_keys(existing)
     pending = [s for s in samples if (s.commit, counter.name) not in done]
     skipped = len(samples) - len(pending)
@@ -249,18 +273,6 @@ def collect(
     final = read_rows(csv_path)
     for_counter = [r for r in final if r.counter == counter.name]
     dates = sorted({r.date for r in for_counter})
-
-    write_meta(
-        meta_path,
-        RepoMeta(
-            name=resolved_name,
-            url=target,
-            mode=mode,
-            branch=resolved_branch,
-            tag_pattern=tag_pattern,
-            exclude_dirs=list(exclude_dirs),
-        ),
-    )
 
     return CollectResult(
         added=len({r.commit for r in collected}),
