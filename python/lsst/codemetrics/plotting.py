@@ -26,7 +26,6 @@ everywhere, so the disagreement is purely about which column a line
 lands in.  `select` refuses to mix backends silently for this reason.
 """
 
-import warnings
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -148,12 +147,9 @@ def select(
         Filtering it away silently would leave an empty frame that plots
         as a blank figure, with nothing to say which backend was wanted
         or which are actually present.
-
-    Warns
-    -----
-    UserWarning
-        Raised if the frame holds results from more than one backend and
-        none was chosen, since summing across backends is meaningless.
+        Also raised if the frame holds results from more than one backend
+        and none was chosen, since plotting an arbitrary mixture is
+        meaningless.
     """
     result = frame
     if result.empty:
@@ -165,10 +161,8 @@ def select(
             raise ValueError(f"No rows counted by {counter!r}. This data was counted by: {available}.")
     elif result["counter"].nunique() > 1:
         found = ", ".join(sorted(result["counter"].unique()))
-        warnings.warn(
-            f"Frame holds results from more than one counter ({found}). Pass counter= to choose one.",
-            UserWarning,
-            stacklevel=2,
+        raise ValueError(
+            f"Frame holds results from more than one counter ({found}). Pass counter= to choose one."
         )
     if languages is not None:
         result = result[result["language"].isin(list(languages))]

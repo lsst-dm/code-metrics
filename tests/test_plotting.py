@@ -72,8 +72,8 @@ def test_select_by_counter(repo_csv):
     assert set(frame["counter"]) == {"tokei"}
 
 
-def test_select_warns_when_counters_are_mixed(repo_csv):
-    with pytest.warns(UserWarning, match="more than one counter"):
+def test_select_rejects_mixed_counters(repo_csv):
+    with pytest.raises(ValueError, match="more than one counter"):
         select(load_repo("demo", repo_csv))
 
 
