@@ -360,8 +360,17 @@ def test_pivot_keeps_one_point_per_timestamp():
     assert wide.index.is_unique
 
 
-def test_pivot_picks_the_last_revision_at_a_shared_timestamp():
-    # Sorted by commit, "ccc" is last at that instant.
+def test_pivot_keeps_one_of_the_revisions_unaltered():
+    # Whichever is kept must be a value that was actually measured, not
+    # a total, an average, or anything else derived from the group.
+    wide = pivot(same_timestamp_frame(), value="code")
+    assert wide["C++"].iloc[0] in (49733, 49848, 49917)
+
+
+def test_pivot_choice_is_by_commit_id_not_by_magnitude():
+    # Ordering is by commit id, which says nothing about position in
+    # history. This pins the documented behavior so nobody later assumes
+    # the largest or the newest revision wins.
     wide = pivot(same_timestamp_frame(), value="code")
     assert wide["C++"].iloc[0] == 49917
 

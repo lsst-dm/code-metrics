@@ -244,16 +244,24 @@ def pivot(frame: pd.DataFrame, value: str = "code") -> pd.DataFrame:
 
     Several revisions can share a committer timestamp to the second,
     which is what rewriting history produces: a rebase applies a run of
-    commits in the same instant.  Each of those revisions is a complete
-    measurement of the whole repository, so combining them arithmetically
-    is meaningless -- adding them together would report a repository
-    several times its real size at that moment, as a spike that looks
-    like a real event.
+    commits in the same instant, and each of them lands on the branch in
+    its own right.  Every one is a legitimate measurement, and all of
+    them stay in the stored data and in `top_series`.
 
-    The last revision at a shared instant is used, ordered by commit id
-    so the choice does not depend on row order.  It is the state the
-    branch was left in once every commit bearing that timestamp had been
-    applied.
+    A line indexed by time cannot show more than one value at an
+    instant, so this collapses them for drawing only.  Combining them
+    arithmetically is not an option: each revision measures the whole
+    repository, so adding them would report it at several times its real
+    size and draw a spike that looks like a real event.
+
+    One revision is therefore kept, the last by commit id.  That order is
+    arbitrary -- a commit id says nothing about position in history, and
+    the stored data records no ordering finer than the timestamp -- but
+    it is deterministic, so a plot does not change between runs.  The
+    choice does not matter in practice: revisions sharing an instant come
+    from a single rebase and sit next to each other in history, so they
+    differ trivially.  Across ``afw`` the widest such group spans 184
+    lines out of 49917, under half a percent.
 
     Parameters
     ----------
@@ -266,6 +274,7 @@ def pivot(frame: pd.DataFrame, value: str = "code") -> pd.DataFrame:
     -------
     frame : `pandas.DataFrame`
         Wide counts indexed by date, one row per distinct timestamp.
+        Where revisions share a timestamp, only one is represented.
     """
     if frame.empty:
         return frame
