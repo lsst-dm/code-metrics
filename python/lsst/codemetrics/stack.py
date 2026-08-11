@@ -247,7 +247,7 @@ def build_targets(legacy: list[LegacyEntry], weeklies: list[str], include_legacy
     targets : `list` [ `ScanTarget` ]
         Targets in chronological order.
     """
-    targets = []
+    targets: list[ScanTarget] = []
     if include_legacy:
         targets.extend(ScanTarget(tag=e.tag, output_name=e.output_name, legacy=True) for e in legacy)
     targets.extend(ScanTarget(tag=tag, output_name=tag, legacy=False) for tag in weeklies)

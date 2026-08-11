@@ -224,11 +224,14 @@ def top_series(
         raise ValueError(f"n must be at least 1, got {n}.")
     if frame.empty:
         return []
-    ranked = []
+    ranked: list[tuple[float, str, str]] = []
     for value in values:
         for language, peak in frame.groupby("language")[value].max().items():
             if peak > 0:
-                ranked.append((peak, language, value))
+                # Group keys come back as the index's element type, which
+                # pandas describes only as hashable; here they are the
+                # language names read from the CSV.
+                ranked.append((peak, str(language), value))
     # Sort by name and measure first so that series tied on their peak
     # are chosen in a stable order rather than by however the rows
     # happened to arrive.

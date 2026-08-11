@@ -152,7 +152,10 @@ def read_rows(path: Path) -> list[LineRow]:
     if not path.exists():
         return []
     with path.open(newline="") as fd:
-        return [LineRow(**record) for record in csv.DictReader(fd)]
+        # Validate the raw CSV strings rather than passing them as
+        # keywords: every column arrives as a string, and pydantic
+        # coerces them to the declared types.
+        return [LineRow.model_validate(record) for record in csv.DictReader(fd)]
 
 
 def write_rows(path: Path, rows: Iterable[LineRow]) -> None:
