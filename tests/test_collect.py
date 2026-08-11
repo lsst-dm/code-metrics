@@ -7,7 +7,18 @@ from lsst.codemetrics.storage import read_rows
 
 
 class StubCounter(LineCounter):
-    """A counter that reports a fixed result without running anything."""
+    """A counter that reports a fixed result without running anything.
+
+    Parameters
+    ----------
+    fail_on : `set` [ `int` ], optional
+        Call numbers, counting from one, to raise `CounterError` on.
+    empty_on : `set` [ `int` ], optional
+        Call numbers to report no languages at all on, as a revision
+        holding no countable code does.
+    raise_on : `dict` [ `int`, `Exception` ], optional
+        Exceptions to raise, keyed by the call number to raise them on.
+    """
 
     name = "stub"
 

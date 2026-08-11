@@ -150,6 +150,7 @@ class ClocCounter(LineCounter):
         return raw.strip()
 
     def parse(self, raw: str) -> dict[str, LanguageCount]:
+        # numpydoc ignore=PR01
         """Convert cloc's YAML report into per-language counts.
 
         See `LineCounter.parse` for the parameters and return value.
@@ -169,6 +170,7 @@ class ClocCounter(LineCounter):
         }
 
     def count(self, path: Path, exclude_dirs: Sequence[str] = ()) -> dict[str, LanguageCount]:
+        # numpydoc ignore=PR01
         """Count lines beneath a directory using cloc.
 
         See `LineCounter.count` for the parameters and return value.
@@ -228,6 +230,7 @@ class SccCounter(LineCounter):
         return raw.strip().split()[-1]
 
     def parse(self, raw: str) -> dict[str, LanguageCount]:
+        # numpydoc ignore=PR01
         """Convert scc's JSON report into per-language counts.
 
         See `LineCounter.parse` for the parameters and return value.
@@ -244,6 +247,7 @@ class SccCounter(LineCounter):
         }
 
     def count(self, path: Path, exclude_dirs: Sequence[str] = ()) -> dict[str, LanguageCount]:
+        # numpydoc ignore=PR01
         """Count lines beneath a directory using scc.
 
         See `LineCounter.count` for the parameters and return value.
@@ -301,6 +305,7 @@ class TokeiCounter(LineCounter):
         return raw.strip().split()[1]
 
     def parse(self, raw: str) -> dict[str, LanguageCount]:
+        # numpydoc ignore=PR01
         """Convert tokei's JSON report into per-language counts.
 
         tokei reports no file count, so it is taken from the length of
@@ -321,6 +326,7 @@ class TokeiCounter(LineCounter):
         }
 
     def count(self, path: Path, exclude_dirs: Sequence[str] = ()) -> dict[str, LanguageCount]:
+        # numpydoc ignore=PR01
         """Count lines beneath a directory using tokei.
 
         See `LineCounter.count` for the parameters and return value.

@@ -4,7 +4,17 @@ from lsst.codemetrics.location import ENV_VAR, REPOS_SUBDIR, DataRoot, config_fi
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch, tmp_path):
-    """Keep the real environment and real config file out of every test."""
+    """Keep the real environment and real config file out of every test.
+
+    Parameters
+    ----------
+    monkeypatch : `pytest.MonkeyPatch`
+        Fixture used to unset the environment variable, redirect the
+        config file lookup, and move off the real working directory.
+    tmp_path : `~pathlib.Path`
+        Temporary directory to point the config lookup and the working
+        directory at.
+    """
     monkeypatch.delenv(ENV_VAR, raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     monkeypatch.chdir(tmp_path / "cwd" if (tmp_path / "cwd").mkdir() or True else tmp_path)

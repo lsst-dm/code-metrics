@@ -135,6 +135,9 @@ def repo_history(
     force: bool,
     strict: bool,
 ) -> None:
+    # This docstring is the command's --help text, so it carries no
+    # Parameters section; each option documents itself in its help string.
+    # numpydoc ignore=PR01
     """Count lines in REPO across its history.
 
     REPO is a local path or a remote URL.
@@ -222,6 +225,9 @@ def stack_scan(
     force_legacy: bool,
     strict: bool,
 ) -> None:
+    # This docstring is the command's --help text, so it carries no
+    # Parameters section; each option documents itself in its help string.
+    # numpydoc ignore=PR01
     """Count lines across lsst_distrib at each release tag.
 
     Requires an lsstsw environment with LSST_BUILD_DIR set.

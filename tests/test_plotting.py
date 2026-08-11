@@ -171,7 +171,20 @@ def make_history_frame():
 
 
 def header_frame(counter, header_languages):
-    """A frame with C++ plus whatever that backend calls its headers."""
+    """A frame with C++ plus whatever that backend calls its headers.
+
+    Parameters
+    ----------
+    counter : `str`
+        Backend name to record on every row.
+    header_languages : `list` [ `str` ]
+        Header language names that backend reports, added alongside C++.
+
+    Returns
+    -------
+    frame : `pandas.DataFrame`
+        Long-format counts, ten lines of code per language.
+    """
     rows = []
     for language in ("C++", *header_languages):
         rows.append(
@@ -460,7 +473,20 @@ def test_insert_gaps_rejects_a_break_it_cannot_place(kwargs):
 
 
 def drawn_x_spans(line):
-    """Horizontal extent of each segment matplotlib actually draws."""
+    """Horizontal extent of each segment matplotlib actually draws.
+
+    Parameters
+    ----------
+    line : `matplotlib.lines.Line2D`
+        Line whose rendered path to inspect.
+
+    Returns
+    -------
+    spans : `list` [ `tuple` [ `float`, `float` ] ]
+        Start and end x of every drawn segment, in matplotlib date
+        numbers.  Segments touching a missing value are left out, since
+        nothing is drawn for them.
+    """
     vertices = line.get_path().vertices
     return [
         (start[0], end[0])

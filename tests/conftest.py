@@ -33,6 +33,14 @@ def isolated_data_location(monkeypatch, tmp_path):
     Resolution falls back to the environment and to a user config file,
     so without this a machine with CODE_METRICS_DATA_DIR set would run
     different tests from one without it.
+
+    Parameters
+    ----------
+    monkeypatch : `pytest.MonkeyPatch`
+        Fixture used to unset the environment variable and redirect the
+        config file lookup.
+    tmp_path : `~pathlib.Path`
+        Temporary directory to point the config lookup at.
     """
     monkeypatch.delenv("CODE_METRICS_DATA_DIR", raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-isolated"))
@@ -46,6 +54,16 @@ def synthetic_repo(tmp_path: Path) -> Path:
     committer date, which is what a rebase produces.  Tags are named with
     inconsistent zero padding so that lexical and chronological ordering
     disagree.
+
+    Parameters
+    ----------
+    tmp_path : `~pathlib.Path`
+        Temporary directory to create the repository in.
+
+    Returns
+    -------
+    repo : `~pathlib.Path`
+        The new repository's working tree.
     """
     repo = tmp_path / "synthetic"
     repo.mkdir()
