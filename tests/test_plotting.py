@@ -11,6 +11,7 @@ import pandas as pd  # noqa: E402
 from lsst.codemetrics.plotting import (  # noqa: E402
     CPP_HEADER_ALIASES,
     apply_aliases,
+    insert_gaps,
     load_repo,
     load_stack,
     pivot,
@@ -378,3 +379,125 @@ def test_pivot_choice_is_by_commit_id_not_by_magnitude():
 def test_pivot_is_deterministic_under_row_order():
     frame = same_timestamp_frame()
     assert pivot(frame, value="code").equals(pivot(frame.iloc[::-1].copy(), value="code"))
+
+
+def quiet_stretch_frame():
+    """Wide counts with a year of silence in the middle."""
+    dates = pd.to_datetime(
+        [
+            "2015-01-01",
+            "2015-01-08",
+            "2015-01-15",
+            "2016-01-15",
+            "2016-01-22",
+        ],
+        utc=True,
+    )
+    return pd.DataFrame(
+        {"C++": [100, 110, 120, 130, 140], "Python": [10, 20, 30, 40, 50]},
+        index=dates,
+    )
+
+
+GAP_START = pd.Timestamp("2015-01-15", tz=UTC)
+GAP_END = pd.Timestamp("2016-01-15", tz=UTC)
+
+
+def test_insert_gaps_adds_one_row_per_long_gap():
+    wide = insert_gaps(quiet_stretch_frame(), max_gap="30D")
+    assert len(wide) == 6
+    assert GAP_START + pd.Timedelta(seconds=1) in wide.index
+
+
+def test_insert_gaps_break_is_missing_in_every_column():
+    wide = insert_gaps(quiet_stretch_frame(), max_gap="30D")
+    assert wide.loc[GAP_START + pd.Timedelta(seconds=1)].isna().all()
+
+
+def test_insert_gaps_keeps_every_measured_value():
+    frame = quiet_stretch_frame()
+    wide = insert_gaps(frame, max_gap="30D")
+    assert wide.loc[frame.index].equals(frame.astype(float))
+
+
+def test_insert_gaps_break_lands_strictly_inside_the_gap():
+    wide = insert_gaps(quiet_stretch_frame(), max_gap="30D", offset="29D")
+    (added,) = wide.index.difference(quiet_stretch_frame().index)
+    assert GAP_START < added < GAP_END
+
+
+def test_insert_gaps_leaves_a_dense_history_alone():
+    frame = quiet_stretch_frame()
+    assert insert_gaps(frame, max_gap="400D").equals(frame)
+
+
+def test_insert_gaps_breaks_every_long_gap():
+    dates = pd.to_datetime(["2015-01-01", "2016-01-01", "2017-01-01"], utc=True)
+    frame = pd.DataFrame({"C++": [1, 2, 3]}, index=dates)
+    assert len(insert_gaps(frame, max_gap="30D")) == 5
+
+
+def test_insert_gaps_on_an_empty_frame_is_empty():
+    assert insert_gaps(pd.DataFrame()).empty
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_gap": "0D"},
+        {"max_gap": "-30D"},
+        {"offset": "0s"},
+        {"offset": "-1s"},
+        # A break must land between the revisions it separates, and an
+        # offset this large could put it on or past the far one.
+        {"max_gap": "30D", "offset": "30D"},
+        {"max_gap": "30D", "offset": "60D"},
+    ],
+)
+def test_insert_gaps_rejects_a_break_it_cannot_place(kwargs):
+    with pytest.raises(ValueError):
+        insert_gaps(quiet_stretch_frame(), **kwargs)
+
+
+def drawn_x_spans(line):
+    """Horizontal extent of each segment matplotlib actually draws."""
+    vertices = line.get_path().vertices
+    return [
+        (start[0], end[0])
+        for start, end in zip(vertices, vertices[1:], strict=False)
+        if np.isfinite(start[1]) and np.isfinite(end[1])
+    ]
+
+
+def step_line(frame):
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    plt = pytest.importorskip("matplotlib.pyplot")
+    fig, ax = plt.subplots()
+    (line,) = ax.plot(frame.index, frame["C++"], drawstyle="steps-post")
+    # Build the path while the axes are still around to convert the
+    # dates, so the caller sees what would have been rendered.
+    line.get_path()
+    plt.close(fig)
+    return line
+
+
+def test_insert_gaps_draws_nothing_across_the_gap():
+    mdates = pytest.importorskip("matplotlib.dates")
+    line = step_line(insert_gaps(quiet_stretch_frame(), max_gap="30D"))
+    middle = mdates.date2num(GAP_START + (GAP_END - GAP_START) / 2)
+    assert not [span for span in drawn_x_spans(line) if span[0] <= middle <= span[1]]
+
+
+def test_masking_the_far_end_of_a_gap_would_not_have_broken_the_line():
+    # Negative control for test_insert_gaps_draws_nothing_across_the_gap.
+    # Blanking the revision that ends the gap, rather than adding a row
+    # inside it, leaves the step running flat the whole way across, and
+    # loses the count measured at the far end as well.  This confirms
+    # that test can tell the two apart.
+    mdates = pytest.importorskip("matplotlib.dates")
+    masked = quiet_stretch_frame().astype(float)
+    masked.loc[GAP_END] = np.nan
+    line = step_line(masked)
+    middle = mdates.date2num(GAP_START + (GAP_END - GAP_START) / 2)
+    assert [span for span in drawn_x_spans(line) if span[0] <= middle <= span[1]]

@@ -281,6 +281,77 @@ def pivot(frame: pd.DataFrame, value: str = "code") -> pd.DataFrame:
     return latest.pivot(index="date", columns="language", values=value).sort_index()
 
 
+def insert_gaps(
+    frame: pd.DataFrame,
+    max_gap: pd.Timedelta | str = pd.Timedelta(days=30),
+    offset: pd.Timedelta | str = pd.Timedelta(seconds=1),
+) -> pd.DataFrame:
+    """Break the drawn line across long stretches without a commit.
+
+    A step line carried across a quiet year is not wrong -- no commits
+    means the counts really did not change -- but it reads as a measured
+    plateau rather than as an absence of development.  This inserts a row
+    of missing values inside each long gap, which matplotlib draws as no
+    line at all, so a quiet stretch looks quiet.
+
+    The break has to be an extra row, rather than a mask over the
+    revision that ends the gap.  With ``drawstyle="steps-post"`` the
+    horizontal segment leaving a point is drawn at that point's own
+    value, so blanking the far end of the gap removes only the riser at
+    its end: the line still runs flat all the way across, and the real
+    count measured there is lost as well.  A row of its own between the
+    two blanks the horizontal instead.
+
+    Gaps are a property of the commit timeline rather than of any one
+    language, so every column breaks at the same place.  Applying this to
+    each measure of one repository puts the breaks at the same dates in
+    all of them, since they share the revisions they were pivoted from.
+
+    Parameters
+    ----------
+    frame : `pandas.DataFrame`
+        Wide counts indexed by date, as `pivot` returns.
+    max_gap : `pandas.Timedelta` or `str`, optional
+        Longest stretch between consecutive revisions to draw through.
+        Anything longer is broken.  Accepts anything
+        `pandas.Timedelta` does, such as ``"90D"``.
+    offset : `pandas.Timedelta` or `str`, optional
+        How far after the revision that starts a gap to place the break.
+        The default holds the last measured value for a moment and then
+        stops, so the break sits where development did.  Raising it to
+        ``max_gap`` instead draws the value as known for that long before
+        the line goes blank.
+
+    Returns
+    -------
+    frame : `pandas.DataFrame`
+        The counts with a missing-value row added inside each long gap.
+        Columns holding whole numbers become floating point, since only
+        floats carry a missing value.
+
+    Raises
+    ------
+    ValueError
+        Raised if ``max_gap`` is not positive, or if ``offset`` is not
+        positive and smaller than ``max_gap``.  A break must land
+        strictly between the revisions it separates; a larger ``offset``
+        could place it on or beyond the revision that ends the gap.
+    """
+    span = pd.Timedelta(max_gap)
+    step = pd.Timedelta(offset)
+    if span <= pd.Timedelta(0):
+        raise ValueError(f"max_gap must be positive, got {span}.")
+    if not pd.Timedelta(0) < step < span:
+        raise ValueError(f"offset must be positive and smaller than max_gap ({span}), got {step}.")
+    if frame.empty:
+        return frame
+    dates = frame.index
+    starts = dates[:-1][(dates[1:] - dates[:-1]) > span]
+    if len(starts) == 0:
+        return frame
+    return frame.reindex(dates.union(starts + step))
+
+
 def load_stack(data_dir: Path = Path("data")) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """Load the stack-wide weekly counts.
 
