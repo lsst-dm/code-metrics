@@ -51,7 +51,94 @@ backend produced the data.
 Provided for convenience only.  Aliasing is never applied automatically,
 because the tools genuinely classify headers differently and treating
 that as a naming difference would misrepresent what they measured.
+
+See `c_family_aliases` for a map that names the folded series after
+whichever of C and C++ the repository actually holds.
 """
+
+PYTHON_ALIASES: dict[str, str] = {
+    "Jupyter Notebook": "Python",
+    "Jupyter": "Python",
+    "Jupyter Notebooks": "Python",
+}
+"""Folds notebooks into Python (`dict` [ `str`, `str` ]).
+
+Each backend uses its own name -- ``Jupyter Notebook`` for cloc,
+``Jupyter`` for scc, ``Jupyter Notebooks`` for tokei -- and the three do
+not collide, so one mapping serves whichever produced the data.
+
+A notebook's prose cells count towards its comment rather than its code,
+so folding them in adds narrative text to Python's comment series.  That
+is the same treatment a docstring gets, and it is what makes the total
+of the two measures the size of the Python written in the repository
+wherever it was written.
+"""
+
+_UNAMBIGUOUS_HEADERS: dict[str, str] = {"C Header": "C", "C++ Header": "C++"}
+"""Header languages that name their own parent (`dict` [ `str`, `str` ]).
+
+Reported by scc and tokei, which classify a header by its contents.
+"""
+
+_AMBIGUOUS_HEADER = "C/C++ Header"
+"""cloc's single header language (`str`).
+
+cloc does not distinguish C headers from C++ ones, so where these lines
+belong can only be settled by what else the repository contains.
+"""
+
+
+def c_family_aliases(frame: pd.DataFrame) -> dict[str, str]:
+    """Choose how to fold C, C++, and their headers, given what is there.
+
+    Header lines are a large fraction of a C or C++ repository, and they
+    have to join the source they belong to before either can be plotted
+    as a single quantity.  Which name that series should carry is a
+    property of the repository rather than of the backend, so this reads
+    it from the counts instead of fixing it in advance:
+
+    - a repository holding C but no C++ folds its headers into ``C``, so
+      the series is named for the only language present;
+    - one holding C++ but no C folds them into ``C++``;
+    - one holding both keeps ``C``, ``C++``, and cloc's ``C/C++ Header``
+      as three series.  The headers belong partly to each, cloc does not
+      record which, and splitting them would invent a division that was
+      never measured;
+    - headers with neither keep the name they were given.
+
+    scc and tokei classify each header themselves, so their ``C Header``
+    and ``C++ Header`` always fold into the language they name.  A
+    backend reports headers one way or the other, never both.
+
+    A language is present if it ever reaches a non-zero count anywhere in
+    the history, not merely at the last revision, so a repository that
+    replaced its C with C++ is recognized as having held both.
+
+    Pass `CPP_HEADER_ALIASES` instead to fold everything into C++
+    regardless, which is the right choice where a handful of C lines
+    sit inside a C++ codebase.
+
+    Parameters
+    ----------
+    frame : `pandas.DataFrame`
+        Long-format counts, as `load_repo` returns.
+
+    Returns
+    -------
+    alias_map : `dict` [ `str`, `str` ]
+        Mapping to hand to `apply_aliases`, holding an entry only for
+        the header languages this repository resolves.
+    """
+    if frame.empty:
+        return {}
+    sizes = (frame["code"] + frame["comment"]).groupby(frame["language"]).max()
+    present = set(sizes[sizes > 0].index)
+    aliases = {name: parent for name, parent in _UNAMBIGUOUS_HEADERS.items() if name in present}
+    if _AMBIGUOUS_HEADER in present:
+        found = {"C", "C++"} & present
+        if len(found) == 1:
+            aliases[_AMBIGUOUS_HEADER] = found.pop()
+    return aliases
 
 
 def load_repo(name: str, data_dir: Path | str | None = None) -> pd.DataFrame:

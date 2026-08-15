@@ -98,6 +98,21 @@ The backends also name C and C++ headers differently: cloc reports one
 `CPP_HEADER_ALIASES` folds all of them into `C++`, and covers whichever
 backend produced the data.
 
+`c_family_aliases(frame)` decides the same fold from the counts instead,
+naming the series after what the repository holds.
+A repository with C and no C++ folds its headers into `C`, one with C++
+and no C folds them into `C++`, and one with both keeps `C`, `C++`, and
+cloc's shared `C/C++ Header` apart, since cloc does not record which of
+the two those lines belong to.
+Presence is judged over the whole history, so a repository that replaced
+its C with C++ is recognized as having held both.
+
+`PYTHON_ALIASES` folds notebooks into Python, under each backend's name
+for them: `Jupyter Notebook` for cloc, `Jupyter` for scc, and
+`Jupyter Notebooks` for tokei.
+SWIG is left alone by both maps, being neither the C++ it wraps nor the
+Python it presents.
+
 Results are stored one row per revision and language, so a language
 appearing for the first time adds rows rather than columns.
 

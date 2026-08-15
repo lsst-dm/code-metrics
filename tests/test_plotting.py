@@ -10,7 +10,9 @@ pytest.importorskip("pandas")
 import pandas as pd  # noqa: E402
 from lsst.codemetrics.plotting import (  # noqa: E402
     CPP_HEADER_ALIASES,
+    PYTHON_ALIASES,
     apply_aliases,
+    c_family_aliases,
     insert_gaps,
     load_repo,
     load_stack,
@@ -227,6 +229,139 @@ def test_cpp_header_aliases_leave_other_languages_alone():
     frame = header_frame("tokei", ["C Header", "Python"])
     folded = apply_aliases(frame, CPP_HEADER_ALIASES)
     assert set(folded["language"]) == {"C++", "Python"}
+
+
+def family_frame(counter, revisions):
+    """Build long-format counts from per-revision language sizes.
+
+    Parameters
+    ----------
+    counter : `str`
+        Backend name to record on every row.
+    revisions : `dict` [ `int`, `dict` [ `str`, `int` ] ]
+        Day of January 2020 to that revision's language sizes, given as
+        lines of code.  A language recorded as zero is measured and
+        empty, which is not the same as absent.
+
+    Returns
+    -------
+    frame : `pandas.DataFrame`
+        Long-format counts, with half as much comment as code.
+    """
+    rows = []
+    for day, sizes in revisions.items():
+        for language, code in sizes.items():
+            rows.append(
+                LineRow(
+                    commit=f"c{day}",
+                    date=datetime(2020, 1, day, tzinfo=UTC),
+                    counter=counter,
+                    counter_version="1.0",
+                    language=language,
+                    n_files=1,
+                    blank=1,
+                    comment=code // 2,
+                    code=code,
+                )
+            )
+    frame = pd.DataFrame([r.model_dump() for r in rows])
+    frame["lines"] = frame["code"] + frame["comment"]
+    return frame
+
+
+def folded_languages(frame):
+    """Language names left after folding the C family.
+
+    Parameters
+    ----------
+    frame : `pandas.DataFrame`
+        Long-format counts.
+
+    Returns
+    -------
+    languages : `set` [ `str` ]
+        Names surviving `~lsst.codemetrics.plotting.c_family_aliases`.
+    """
+    return set(apply_aliases(frame, c_family_aliases(frame))["language"])
+
+
+def test_c_family_aliases_fold_headers_a_backend_names_unambiguously():
+    frame = family_frame("tokei", {1: {"C": 10, "C Header": 5, "C++": 20, "C++ Header": 7}})
+    assert c_family_aliases(frame) == {"C Header": "C", "C++ Header": "C++"}
+    assert folded_languages(frame) == {"C", "C++"}
+
+
+def test_c_family_aliases_call_a_repository_without_cpp_c():
+    # cloc cannot tell a C header from a C++ one, but with no C++ in the
+    # repository at all there is nothing for its headers to belong to
+    # but C, and the series should say C rather than C++.
+    frame = family_frame("cloc", {1: {"C": 10, "C/C++ Header": 5, "Python": 3}})
+    assert c_family_aliases(frame) == {"C/C++ Header": "C"}
+    assert folded_languages(frame) == {"C", "Python"}
+
+
+def test_c_family_aliases_fold_ambiguous_headers_into_cpp():
+    frame = family_frame("cloc", {1: {"C++": 20, "C/C++ Header": 5}})
+    assert c_family_aliases(frame) == {"C/C++ Header": "C++"}
+    assert folded_languages(frame) == {"C++"}
+
+
+def test_c_family_aliases_keep_c_and_cpp_apart_when_both_are_present():
+    # The headers belong partly to each and cloc does not say which, so
+    # attributing them to either would invent a division of the counts
+    # that was never measured.
+    frame = family_frame("cloc", {1: {"C": 10, "C++": 20, "C/C++ Header": 5}})
+    assert c_family_aliases(frame) == {}
+    assert folded_languages(frame) == {"C", "C++", "C/C++ Header"}
+
+
+def test_c_family_aliases_judge_presence_across_the_whole_history():
+    # C++ arrives only after the C it replaced is gone. Judging the last
+    # revision alone would call this a C++ repository and hand it the
+    # headers, hiding that both were there.
+    frame = family_frame(
+        "cloc",
+        {1: {"C": 10, "C/C++ Header": 5}, 2: {"C++": 20, "C/C++ Header": 5}},
+    )
+    assert c_family_aliases(frame) == {}
+
+
+def test_c_family_aliases_treat_a_language_measured_as_zero_as_absent():
+    frame = family_frame("cloc", {1: {"C": 0, "C++": 20, "C/C++ Header": 5}})
+    assert c_family_aliases(frame) == {"C/C++ Header": "C++"}
+
+
+def test_c_family_aliases_leave_headers_with_no_source_alone():
+    # Headers and nothing to compile them into: neither name is any more
+    # right than the other, so the series keeps the one it was given.
+    frame = family_frame("cloc", {1: {"C/C++ Header": 5, "Python": 3}})
+    assert c_family_aliases(frame) == {}
+    assert folded_languages(frame) == {"C/C++ Header", "Python"}
+
+
+def test_c_family_aliases_on_a_repository_with_no_c_are_empty():
+    assert c_family_aliases(family_frame("cloc", {1: {"Python": 3, "YAML": 2}})) == {}
+
+
+def test_c_family_aliases_on_an_empty_frame_are_empty():
+    assert c_family_aliases(pd.DataFrame()) == {}
+
+
+@pytest.mark.parametrize(
+    "counter,notebook",
+    [("cloc", "Jupyter Notebook"), ("scc", "Jupyter"), ("tokei", "Jupyter Notebooks")],
+)
+def test_python_aliases_fold_whatever_a_backend_calls_a_notebook(counter, notebook):
+    frame = family_frame(counter, {1: {"Python": 10, notebook: 6}})
+    folded = apply_aliases(frame, PYTHON_ALIASES)
+    assert set(folded["language"]) == {"Python"}
+    assert folded["code"].iloc[0] == 16
+
+
+def test_python_aliases_leave_other_languages_alone():
+    frame = family_frame("cloc", {1: {"Python": 10, "C++": 6, "SWIG": 4}})
+    folded = apply_aliases(frame, PYTHON_ALIASES)
+    assert set(folded["language"]) == {"Python", "C++", "SWIG"}
 
 
 def mixed_frame():
