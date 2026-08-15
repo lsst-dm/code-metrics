@@ -1,3 +1,34 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lsst-code-metrics"
+version = "0.1.0"
+description = "Tools for measuring the size of the LSST Science Pipelines code base over time."
+requires-python = ">=3.12"
+dependencies = [
+    "click",
+    "pydantic",
+    "pyyaml",
+    "rich",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib", "pandas"]
+test = ["pytest"]
+
+[project.scripts]
+code-metrics = "lsst.codemetrics.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "python"}
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.package-data]
+"lsst.codemetrics" = ["data/*.txt"]
 
 [tool.ruff]
 line-length = 110
@@ -18,6 +49,9 @@ ignore = [
     "D205"
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 79
 
@@ -27,3 +61,20 @@ convention = "numpy"
 [tool.ruff.format]
 docstring-code-format = true
 docstring-code-line-length = 79
+
+[tool.numpydoc_validation]
+checks = [
+    "all",  # All except the rules listed below.
+    "SA01",  # See Also section.
+    "EX01",  # Example section.
+    "SS06",  # Summary can go into second line.
+    "GL01",  # Summary text can start on same line as """
+    "GL08",  # Do not require docstring.
+    "ES01",  # No extended summary required.
+    "RT01",  # Unfortunately our @property trigger this.
+    "RT02",  # Does not want named return value. DM style says we do.
+    "SS05",  # pydocstyle is better at finding infinitive verb.
+    "GL03",  # ruff format of docstrings disagrees.
+    "PR04",  # We use type annotations.
+    "SA04",  # We do not need to add descriptions to see also entries.
+]
