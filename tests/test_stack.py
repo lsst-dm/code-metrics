@@ -1,5 +1,8 @@
+import subprocess
+
 import pytest
 from lsst.codemetrics import stack
+from lsst.codemetrics.revisions import GitError
 from lsst.codemetrics.stack import (
     EXCLUDED_PRODUCTS,
     INCLUDE_LANGS,
@@ -10,6 +13,7 @@ from lsst.codemetrics.stack import (
     load_tags_file,
     manifest_products,
     scan_target,
+    sync_clones,
 )
 
 
@@ -100,7 +104,7 @@ def test_metadetect_is_excluded():
 
 
 def test_scan_target_replaces_report_only_after_success(tmp_path, monkeypatch):
-    monkeypatch.setattr(stack, "_prepare", lambda *args: None)
+    monkeypatch.setattr(stack, "_prepare", lambda *args, **kwargs: None)
     monkeypatch.setattr(stack, "manifest_products", lambda build_dir: ["afw"])
     output_dir = tmp_path / "output"
     output_dir.mkdir()
@@ -126,7 +130,7 @@ def test_scan_target_replaces_report_only_after_success(tmp_path, monkeypatch):
 
 
 def test_scan_target_atomically_installs_completed_report(tmp_path, monkeypatch):
-    monkeypatch.setattr(stack, "_prepare", lambda *args: None)
+    monkeypatch.setattr(stack, "_prepare", lambda *args, **kwargs: None)
     monkeypatch.setattr(stack, "manifest_products", lambda build_dir: ["afw"])
 
     class SuccessfulCounter:
@@ -144,3 +148,49 @@ def test_scan_target_atomically_installs_completed_report(tmp_path, monkeypatch)
     )
 
     assert (output_dir / "w.2020.01.yaml").read_text() == "complete\n"
+
+
+def _clone(source, destination):
+    subprocess.run(["git", "clone", "-q", str(source), str(destination)], check=True)
+
+
+def test_sync_clones_fetches_tags_created_after_cloning(synthetic_repo, tmp_path):
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    _clone(synthetic_repo, build_dir / "afw")
+    (build_dir / "not_a_clone").mkdir()
+    subprocess.run(["git", "-C", str(synthetic_repo), "tag", "w.2020.11"], check=True)
+
+    assert sync_clones(build_dir) == 1
+
+    tags = subprocess.run(
+        ["git", "-C", str(build_dir / "afw"), "tag", "--list", "w.2020.11"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert tags.strip() == "w.2020.11"
+
+
+def test_sync_clones_reports_every_failure(synthetic_repo, tmp_path):
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    for name in ("afw", "daf_butler", "pipe_base"):
+        _clone(synthetic_repo, build_dir / name)
+    for name in ("afw", "pipe_base"):
+        subprocess.run(
+            ["git", "-C", str(build_dir / name), "remote", "set-url", "origin", str(tmp_path / "gone")],
+            check=True,
+        )
+
+    with pytest.raises(GitError) as excinfo:
+        sync_clones(build_dir)
+
+    message = str(excinfo.value)
+    assert "afw:" in message
+    assert "pipe_base:" in message
+    assert "daf_butler" not in message
+
+
+def test_sync_clones_tolerates_a_missing_build_dir(tmp_path):
+    assert sync_clones(tmp_path / "build") == 0

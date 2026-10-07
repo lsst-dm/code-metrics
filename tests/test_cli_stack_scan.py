@@ -132,3 +132,18 @@ def test_a_failing_tag_is_logged_with_its_exception_and_named_in_the_summary(mon
     assert result.exit_code == 0, result.output
     assert any("w.2020.02" in record.message and "_BoomError" in record.message for record in caplog.records)
     assert "w.2020.02" in result.output
+
+
+def test_sync_failure_is_reported_cleanly(monkeypatch, tmp_path):
+    monkeypatch.setenv("LSST_BUILD_DIR", str(tmp_path / "lsstsw" / ".lsst-build"))
+
+    def fake_sync_clones(*args, **kwargs):
+        raise GitError("Could not fetch clones:\nafw: could not resolve host")
+
+    monkeypatch.setattr(cli, "sync_clones", fake_sync_clones)
+
+    result = CliRunner().invoke(main, ["stack-scan"])
+
+    assert result.exit_code != 0
+    assert not isinstance(result.exception, GitError)
+    assert "could not resolve host" in result.output

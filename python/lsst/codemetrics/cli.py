@@ -23,6 +23,7 @@ from .stack import (
     lsstsw_paths,
     scan_target,
     should_scan,
+    sync_clones,
 )
 from .worktree import DEFAULT_CACHE_DIR
 
@@ -235,6 +236,11 @@ def stack_scan(
     try:
         lsstsw_dir, build_dir, lsst_build_exe = lsstsw_paths()
     except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    try:
+        sync_clones(build_dir)
+    except GitError as exc:
         raise click.ClickException(str(exc)) from exc
 
     if tags_file is not None:

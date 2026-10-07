@@ -9,17 +9,19 @@ discards the header entirely, and the header's own ``elapsed_seconds``,
 from run to run.
 """
 
+import functools
 import logging
 import os
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from importlib import resources
 from pathlib import Path
 
 from pydantic import BaseModel
 
 from .counters import ClocCounter
-from .revisions import git_output
+from .revisions import GitError, git_output
 
 _LOG = logging.getLogger(__name__)
 
@@ -148,8 +150,34 @@ def lsstsw_paths() -> tuple[Path, Path, Path]:
     return lsstsw_dir, lsstsw_dir / "build", lsst_build_dir / "bin" / "lsst-build"
 
 
-def _prepare(lsstsw_dir: Path, build_dir: Path, lsst_build_exe: Path, ref: str | None) -> None:
+@functools.cache
+def _supports_no_pr_info(lsst_build_exe: Path) -> bool:
+    """Report whether ``lsst-build prepare`` accepts ``--no-pr-info``.
+
+    Parameters
+    ----------
+    lsst_build_exe : `~pathlib.Path`
+        The lsst-build program.
+
+    Returns
+    -------
+    supported : `bool`
+        `True` if the option is available.
+    """
+    completed = subprocess.run(
+        [str(lsst_build_exe), "prepare", "--help"], capture_output=True, text=True, check=False
+    )
+    return "--no-pr-info" in completed.stdout
+
+
+def _prepare(
+    lsstsw_dir: Path, build_dir: Path, lsst_build_exe: Path, ref: str | None, *, fetch: bool = True
+) -> None:
     """Run ``lsst-build prepare``.
+
+    The GitHub pull request lookup that lsst-build performs for non-default
+    refs is disabled when lsst-build supports doing so, since every release
+    tag is a non-default ref and the lookup is slow and irrelevant here.
 
     Parameters
     ----------
@@ -161,6 +189,10 @@ def _prepare(lsstsw_dir: Path, build_dir: Path, lsst_build_exe: Path, ref: str |
         The lsst-build program.
     ref : `str`, optional
         Git ref to check out.  The default ref is used when this is `None`.
+    fetch : `bool`, optional
+        Whether to update every clone from its remote before checking out.
+        Without a fetch, only refs already present locally can be found,
+        although products missing entirely are still cloned.
     """
     args = [
         str(lsst_build_exe),
@@ -172,8 +204,59 @@ def _prepare(lsstsw_dir: Path, build_dir: Path, lsst_build_exe: Path, ref: str |
     ]
     if ref is not None:
         args.extend(["--ref", ref])
+    if not fetch:
+        args.append("--no-fetch")
+    if _supports_no_pr_info(lsst_build_exe):
+        args.append("--no-pr-info")
     args.extend([str(build_dir), PRODUCT])
     subprocess.run(args, check=True)
+
+
+def sync_clones(build_dir: Path, max_workers: int = 16) -> int:
+    """Update every existing clone in the build directory from its remote.
+
+    Every tag is then prepared without lsst-build fetching anything.  A
+    clone that a tag's dependency tree reaches only after the first tag
+    would otherwise never be fetched, and lsst-build silently falls back
+    to the default branch when the requested tag is missing.  Products
+    with no clone at all are unaffected because lsst-build clones those
+    whether or not it fetches.
+
+    Parameters
+    ----------
+    build_dir : `~pathlib.Path`
+        Directory that lsst-build clones sources into.
+    max_workers : `int`, optional
+        Number of clones to fetch concurrently.
+
+    Returns
+    -------
+    n_synced : `int`
+        Number of clones updated.
+
+    Raises
+    ------
+    GitError
+        Raised if any clone fails to fetch, after all have been attempted.
+    """
+    if not build_dir.is_dir():
+        return 0
+    clones = sorted(path for path in build_dir.iterdir() if (path / ".git").exists())
+    _LOG.info("Fetching %d clones in %s.", len(clones), build_dir)
+
+    def fetch(clone: Path) -> GitError | None:
+        try:
+            git_output(clone, "fetch", "--prune", "--tags", "origin")
+        except GitError as exc:
+            return exc
+        return None
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        results = list(pool.map(fetch, clones))
+    failures = [f"{clone.name}: {exc}" for clone, exc in zip(clones, results, strict=True) if exc is not None]
+    if failures:
+        raise GitError("Could not fetch clones:\n" + "\n".join(failures))
+    return len(clones)
 
 
 def bootstrap_distrib(lsstsw_dir: Path, build_dir: Path, lsst_build_exe: Path) -> Path:
@@ -183,7 +266,8 @@ def bootstrap_distrib(lsstsw_dir: Path, build_dir: Path, lsst_build_exe: Path) -
     nothing to read tags from until lsst-build has run at least once.
     Preparing the default ref breaks that cycle without this project
     needing to know how a product name maps to a clone URL, which is
-    lsst_build's responsibility.
+    lsst_build's responsibility.  An existing checkout is left alone;
+    `sync_clones` is what keeps it current.
 
     Parameters
     ----------
@@ -200,9 +284,7 @@ def bootstrap_distrib(lsstsw_dir: Path, build_dir: Path, lsst_build_exe: Path) -
         The lsst_distrib checkout.
     """
     distrib = build_dir / PRODUCT
-    if distrib.exists():
-        git_output(distrib, "fetch", "--prune", "--tags", "origin")
-    else:
+    if not distrib.exists():
         _LOG.info("Preparing %s at its default ref to discover tags.", PRODUCT)
         _prepare(lsstsw_dir, build_dir, lsst_build_exe, None)
     return distrib
@@ -299,6 +381,8 @@ def scan_target(
 ) -> None:
     """Check out one tag and write its report.
 
+    lsst-build does not fetch, so `sync_clones` must have been run first.
+
     Parameters
     ----------
     target : `ScanTarget`
@@ -318,8 +402,10 @@ def scan_target(
     ------
     RuntimeError
         Raised if the manifest yields no products to count.
+    subprocess.CalledProcessError
+        Raised if lsst-build fails.
     """
-    _prepare(lsstsw_dir, build_dir, lsst_build_exe, target.tag)
+    _prepare(lsstsw_dir, build_dir, lsst_build_exe, target.tag, fetch=False)
     products = manifest_products(build_dir)
     if not products:
         raise RuntimeError(f"No products found with ref {target.tag}.")
