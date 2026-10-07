@@ -1,6 +1,6 @@
 ---
 # github.com/AlDanial/cloc
-header : 
+header :
   cloc_url           : github.com/AlDanial/cloc
   cloc_version       : 2.04
   elapsed_seconds    : 4.84522199630737
@@ -24,7 +24,7 @@ header :
   blank: 14977
   comment: 49687
   code: 41796
-SUM: 
+SUM:
   blank: 163348
   comment: 355211
   code: 633781

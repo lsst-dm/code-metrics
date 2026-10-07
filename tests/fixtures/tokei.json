@@ -1,0 +1,30 @@
+{
+  "C Header": {
+    "blanks": 0,
+    "code": 2,
+    "comments": 1,
+    "reports": [
+      {"stats": {"blanks": 0, "code": 2, "comments": 1, "blobs": {}}, "name": "/tmp/fx/src/b.h"}
+    ],
+    "children": {},
+    "inaccurate": false
+  },
+  "Python": {
+    "blanks": 3,
+    "code": 4,
+    "comments": 1,
+    "reports": [
+      {"stats": {"blanks": 3, "code": 4, "comments": 1, "blobs": {}}, "name": "/tmp/fx/src/a.py"}
+    ],
+    "children": {},
+    "inaccurate": false
+  },
+  "Total": {
+    "blanks": 3,
+    "code": 6,
+    "comments": 2,
+    "reports": [],
+    "children": {},
+    "inaccurate": false
+  }
+}

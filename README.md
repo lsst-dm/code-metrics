@@ -2,9 +2,143 @@
 
 Data and tools for calculating metrics about the science pipelines code base.
 
-`countlines.py` uses `lsst-build` to check out weekly releases and runs
-`cloc.py` on the result.
+## Installation
 
-The results of running this command can be found in the `data/` directory.
+    pip install -e '.[plot]'
 
-Use `plot-line-counts.ipynb` to plot the data.
+This provides the `code-metrics` command.
+
+## Counting a single repository
+
+    code-metrics repo-history https://github.com/lsst/daf_butler
+
+Samples the first-parent chain of the default branch, counts each revision
+with `cloc`, and writes `<data root>/repos/daf_butler.csv`.
+Re-running counts only revisions that are not already recorded.
+
+### Where the counts go
+
+This command works on any git repository, so its results do not belong
+beside the LSST specific stack data in this repository.
+They live in a data repository of your own, whose top directory is the
+*data root*.
+Per-repository counts sit in its `repos` directory, leaving room beside
+them for other kinds of data later.
+
+The root is resolved in this order:
+
+1. `--data-dir` on the command line, or `data_dir=` in the notebook
+2. the `CODE_METRICS_DATA_DIR` environment variable
+3. `data_dir` in `~/.config/code-metrics/config.toml`, honouring
+   `XDG_CONFIG_HOME`
+4. the current directory, so working inside the data repository needs no
+   configuration at all
+
+Set it up once:
+
+    git clone <your-data-repo> ~/work/code-metrics-data
+    export CODE_METRICS_DATA_DIR=~/work/code-metrics-data
+
+or write `~/.config/code-metrics/config.toml`:
+
+```toml
+data_dir = "~/work/code-metrics-data"
+```
+
+Collection prints the root it resolved and which rule chose it, and
+`load_repo` says the same in its error when a file is missing.
+The command that writes and the notebook that reads resolve the root by
+the same rule, so they cannot end up pointing at different directories
+without saying so.
+
+Use `--mode tags` to sample weekly tags instead, `--mode all` for every
+commit, and `--counter scc` or `--counter tokei` for a different backend.
+Counts from different backends coexist in one file, so they can be
+compared over identical revisions.
+
+An output name has one repository and one set of sampling and exclusion
+settings. A later run with incompatible settings stops before writing;
+choose a different `--name` rather than combining unlike datasets.
+`--force` recounts the same dataset with the same settings.
+
+### Docstrings, and how far the backends agree
+
+The backends disagree about whether a Python docstring is code or
+comment, which matters a great deal for numpydoc-heavy code.
+Counted over `daf_butler`'s Python source:
+
+| Backend | code | comment | blank |
+|---|---|---|---|
+| cloc | 54,373 | 48,500 | 16,291 |
+| tokei | 55,063 | 52,420 | 11,827 |
+| scc | 67,312 | 41,689 | 10,322 |
+
+**cloc and tokei agree on `code` to about one percent.**
+They only do so because the tokei backend enables tokei's own
+`treat_doc_strings_as_comments` setting by default; counted natively
+tokei reports roughly twice the code, since it treats every docstring
+line as code.
+`TokeiCounter(docstrings_as_comments=False)` restores that behavior.
+
+**scc is not comparable with either**, running about a quarter higher on
+`code`.
+It classifies much of the same material as code however it is
+configured, so do not mix its Python figures with the others.
+
+The totals of all three columns agree everywhere to within a tenth of a
+percent, so this is purely about which column a line lands in.
+`select()` raises rather than mixing backends silently.
+
+`cloc --docstring-as-code` would move cloc the other way, but every file
+in `data/` was counted with cloc's default, so the stack-wide scan keeps
+it.
+
+The backends also name C and C++ headers differently: cloc reports one
+`C/C++ Header`, while scc and tokei split `C Header` from `C++ Header`.
+`CPP_HEADER_ALIASES` folds all of them into `C++`, and covers whichever
+backend produced the data.
+
+`c_family_aliases(frame)` decides the same fold from the counts instead,
+naming the series after what the repository holds.
+A repository with C and no C++ folds its headers into `C`, one with C++
+and no C folds them into `C++`, and one with both keeps `C`, `C++`, and
+cloc's shared `C/C++ Header` apart, since cloc does not record which of
+the two those lines belong to.
+Presence is judged over the whole history, so a repository that replaced
+its C with C++ is recognized as having held both.
+
+`PYTHON_ALIASES` folds notebooks into Python, under each backend's name
+for them: `Jupyter Notebook` for cloc, `Jupyter` for scc, and
+`Jupyter Notebooks` for tokei.
+SWIG is left alone by both maps, being neither the C++ it wraps nor the
+Python it presents.
+
+Results are stored one row per revision and language, so a language
+appearing for the first time adds rows rather than columns.
+
+Plot them with `plot-repo-lines.ipynb`.
+
+## Counting the whole stack
+
+    code-metrics stack-scan
+
+Checks out each `lsst_distrib` release tag with `lsst-build` and runs
+`cloc` over the result, writing one YAML report per tag into `data/`.
+Requires an lsstsw environment with `LSST_BUILD_DIR` set, and `cloc` from
+https://github.com/AlDanial/cloc.
+
+Tags whose report already exists are skipped, so a routine update only
+scans what is new.
+
+Plot the results with `plot-line-counts.ipynb`.
+
+### Pre-weekly releases
+
+Weekly tags begin at `w.2015.22`.
+Earlier points on the curve come from formal releases, recorded under
+weekly-style names matching each release date.
+`python/lsst/codemetrics/data/legacy-tags.txt` holds that mapping, which
+was transcribed rather than derived and cannot be reconstructed from tag
+metadata.
+Those results are protected from `--force`; overwriting them requires
+`--force-legacy` as well.
